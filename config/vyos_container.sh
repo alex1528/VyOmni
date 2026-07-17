@@ -73,6 +73,10 @@ set container name wg-nginx volume data source '/var/www/monitor/data'
 set container name wg-nginx volume data destination '/var/www/monitor/data'
 set container name wg-nginx volume data mode 'ro'
 
+set container name wg-nginx volume assets source '/var/www/monitor/assets'
+set container name wg-nginx volume assets destination '/var/www/monitor/assets'
+set container name wg-nginx volume assets mode 'ro'
+
 # === 容器4: Alerter（告警推送） ===
 set container name wg-alerter image 'localhost/wg-aggregator:latest'
 set container name wg-alerter network monitor-net address '172.20.0.13'
