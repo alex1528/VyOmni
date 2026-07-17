@@ -25,6 +25,7 @@ set container network monitor-net prefix '172.20.0.0/24'
 # === 容器1: Collector（采集隧道状态） ===
 set container name wg-collector image 'localhost/wg-collector:latest'
 set container name wg-collector allow-host-networks
+set container name wg-collector capability 'net-admin'
 set container name wg-collector restart 'on-failure'
 
 set container name wg-collector volume config source '/etc/wg-monitor'
