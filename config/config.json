@@ -1,0 +1,19 @@
+{
+  "peer_map": {
+    "REPLACE_WITH_SHANGHAI_PUBLIC_KEY": {
+      "name": "华东-上海分部",
+      "branch_id": "branch-shanghai-01",
+      "region": "华东"
+    },
+    "REPLACE_WITH_BEIJING_PUBLIC_KEY": {
+      "name": "华北-北京分部",
+      "branch_id": "branch-beijing-01",
+      "region": "华北"
+    },
+    "REPLACE_WITH_GUANGZHOU_PUBLIC_KEY": {
+      "name": "华南-广州分部",
+      "branch_id": "branch-guangzhou-01",
+      "region": "华南"
+    }
+  }
+}

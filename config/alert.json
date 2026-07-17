@@ -1,0 +1,22 @@
+{
+  "enabled": true,
+  "cooldown_seconds": 300,
+  "channels": {
+    "dingtalk": {
+      "enabled": false,
+      "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN",
+      "secret": "SEC_YOUR_SIGN_SECRET"
+    },
+    "wecom": {
+      "enabled": false,
+      "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+    },
+    "generic": {
+      "enabled": false,
+      "webhook_url": "https://your-server.com/api/alert",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      }
+    }
+  }
+}
