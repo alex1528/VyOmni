@@ -1,0 +1,12 @@
+# 旧文件（已删除/重命名，防止误提交）
+/info.txt
+
+# 运行时产物
+__pycache__/
+*.pyc
+/frontend/assets/echarts.min.js
+/frontend/assets/fontawesome/
+
+# 本地临时文件
+*.tmp
+*.log
