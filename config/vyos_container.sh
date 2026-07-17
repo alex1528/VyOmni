@@ -34,6 +34,10 @@ set container name wg-collector volume config mode 'ro'
 set container name wg-collector volume data source '/var/www/monitor/data'
 set container name wg-collector volume data destination '/output'
 
+set container name wg-collector volume wg-bin source '/usr/bin/wg'
+set container name wg-collector volume wg-bin destination '/usr/bin/wg'
+set container name wg-collector volume wg-bin mode 'ro'
+
 set container name wg-collector environment WG_MONITOR_CONFIG value '/etc/wg-monitor/config.json'
 set container name wg-collector environment WG_MONITOR_OUTPUT value '/output'
 set container name wg-collector environment WG_MONITOR_INTERVAL value '5'
