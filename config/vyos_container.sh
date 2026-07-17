@@ -2,12 +2,22 @@
 # ============================================================
 # VyOmni - VyOS 1.5.0 容器化配置命令集
 # 使用方式（在 VyOS 上）：
+#   sudo mkdir -p /var/www/monitor/data /etc/wg-monitor
 #   configure
 #   source /opt/wg-monitor/config/vyos_container.sh
 #   commit
 #   save
 #   exit
 # ============================================================
+
+# === 前置：创建宿主机目录（configure模式外执行，此处仅做提示） ===
+# 如果尚未创建，请先退出 configure 执行：
+#   sudo mkdir -p /var/www/monitor/data
+#   sudo mkdir -p /etc/wg-monitor
+#   sudo cp /opt/wg-monitor/config/config.json /etc/wg-monitor/
+#   sudo cp /opt/wg-monitor/config/secrets.json /etc/wg-monitor/
+#   sudo cp /opt/wg-monitor/config/alert.json /etc/wg-monitor/
+#   sudo chmod 600 /etc/wg-monitor/secrets.json
 
 # === 容器网络 ===
 set container network monitor-net prefix '172.20.0.0/24'
