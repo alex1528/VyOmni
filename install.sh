@@ -395,7 +395,7 @@ deploy_branch() {
 [agent]
 branch_id = ${BRANCH_ID}
 secret = ${BRANCH_SECRET}
-hq_endpoint = ${HQ_ADDR}/monitor/api/report
+hq_endpoint = ${HQ_ADDR}/api/report
 report_interval = 5
 interfaces = ${INTERFACES}
 EOF
@@ -427,7 +427,7 @@ EOF
     echo -e "${GREEN}✅ 分支 Agent 部署完成！${NC}"
     echo ""
     echo "  分支 ID:   $BRANCH_ID"
-    echo "  上报地址:  ${HQ_ADDR}/monitor/api/report"
+    echo "  上报地址:  ${HQ_ADDR}/api/report"
     echo "  检查状态:  systemctl status wg-branch-agent"
     echo "  查看日志:  journalctl -u wg-branch-agent -f"
     echo ""

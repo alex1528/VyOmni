@@ -61,7 +61,7 @@ COPY js/ /var/www/monitor/js/
 RUN mkdir -p /var/www/monitor/data /var/www/monitor/assets
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-    CMD wget -q --spider http://127.0.0.1:8080/monitor/ || exit 1
+    CMD wget -q --spider http://127.0.0.1:8080/ || exit 1
 CMD ["nginx", "-g", "daemon off;"]
 EOF
 # 如果有离线资源则复制进去

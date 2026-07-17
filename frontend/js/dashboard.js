@@ -5,9 +5,9 @@
 
 // ==================== 配置 ====================
 const API = {
-    tunnel: '/monitor/api/tunnel',
-    branches: '/monitor/api/branches',
-    config: '/monitor/api/config',
+    tunnel: '/api/tunnel',
+    branches: '/api/branches',
+    config: '/api/config',
 };
 const POLL_INTERVAL = 5000;       // 5秒轮询
 const DATA_EXPIRE_SEC = 30;       // 数据超过30秒判定过期

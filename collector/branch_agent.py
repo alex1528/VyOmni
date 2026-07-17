@@ -25,7 +25,7 @@ AGENT_CONFIG_PATH = os.environ.get('WG_AGENT_CONFIG', '/etc/wg-monitor/agent.con
 DEFAULT_CONFIG = {
     'branch_id': 'branch-default',
     'secret': '',
-    'hq_endpoint': 'http://10.10.0.1:8080/monitor/api/report',
+    'hq_endpoint': 'http://10.10.0.1:8080/api/report',
     'report_interval': 5,
     'interfaces': ['eth0', 'eth1', 'wg0'],  # 监控的接口列表
 }

@@ -35,7 +35,7 @@ cat > "$CONFIG_DIR/agent.conf" << EOF
 [agent]
 branch_id = ${BRANCH_ID}
 secret=[REDACTED_PASSWORD]
-hq_endpoint = http://${HQ_IP}:8080/monitor/api/report
+hq_endpoint = http://${HQ_IP}:8080/api/report
 report_interval = 5
 interfaces = ${INTERFACES}
 EOF
@@ -70,7 +70,7 @@ echo "  ✅ 分支 Agent 部署完成！"
 echo "=========================================="
 echo ""
 echo "  分支 ID: ${BRANCH_ID}"
-echo "  上报目标: http://${HQ_IP}:8080/monitor/api/report"
+echo "  上报目标: http://${HQ_IP}:8080/api/report"
 echo "  检查状态: systemctl status wg-branch-agent"
 echo "  查看日志: journalctl -u wg-branch-agent -f"
 echo ""
