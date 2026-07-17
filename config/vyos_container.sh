@@ -63,17 +63,14 @@ set container name wg-aggregator port report source '9100'
 set container name wg-aggregator port report destination '9100'
 set container name wg-aggregator port report listen-address '127.0.0.1'
 
-# === 容器3: Nginx（前端 + API网关） ===
+# === 容器3: Nginx（前端 + API网关，host网络直接监听8080） ===
 set container name wg-nginx image 'localhost/wg-nginx:latest'
-set container name wg-nginx network monitor-net address '172.20.0.12'
+set container name wg-nginx allow-host-networks
 set container name wg-nginx restart 'on-failure'
 
 set container name wg-nginx volume data source '/var/www/monitor/data'
 set container name wg-nginx volume data destination '/var/www/monitor/data'
 set container name wg-nginx volume data mode 'ro'
-
-set container name wg-nginx port web source '8080'
-set container name wg-nginx port web destination '8080'
 
 # === 容器4: Alerter（告警推送） ===
 set container name wg-alerter image 'localhost/wg-aggregator:latest'
