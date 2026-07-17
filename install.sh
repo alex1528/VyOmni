@@ -343,7 +343,7 @@ deploy_hq_vyos_container() {
     echo ""
     echo "快速步骤："
     echo "  1. 构建镜像: bash scripts/build_images.sh"
-    echo "  2. 导入镜像: sudo podman load -i dist/wg-*.tar.gz"
+    echo "  2. 导入镜像: for f in dist/*.tar.gz; do podman load -i "$f"; done"
     echo "  3. VyOS CLI: configure → set container ... → commit; save"
     echo ""
 
