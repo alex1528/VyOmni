@@ -9,8 +9,11 @@ cd "$(dirname "$0")/.."
 # 自动选择容器引擎
 if command -v podman &>/dev/null; then
     CTR="podman"
+    # podman 默认 OCI 格式不支持 HEALTHCHECK，需指定 docker 格式
+    BUILD_FMT="--format docker"
 elif command -v docker &>/dev/null; then
     CTR="docker"
+    BUILD_FMT=""
 else
     echo "错误：未找到 podman 或 docker，无法构建镜像"
     echo ""
@@ -33,13 +36,13 @@ echo ""
 
 # 构建 Collector
 echo "[1/3] 构建 Collector 镜像..."
-$CTR build -t "$REGISTRY/wg-collector:$TAG" -f collector/Dockerfile collector/
+$CTR build $BUILD_FMT -t "$REGISTRY/wg-collector:$TAG" -f collector/Dockerfile collector/
 echo "  ✓ $REGISTRY/wg-collector:$TAG"
 echo ""
 
 # 构建 Aggregator
 echo "[2/3] 构建 Aggregator 镜像..."
-$CTR build -t "$REGISTRY/wg-aggregator:$TAG" -f aggregator/Dockerfile aggregator/
+$CTR build $BUILD_FMT -t "$REGISTRY/wg-aggregator:$TAG" -f aggregator/Dockerfile aggregator/
 echo "  ✓ $REGISTRY/wg-aggregator:$TAG"
 echo ""
 
@@ -63,7 +66,7 @@ CMD ["nginx", "-g", "daemon off;"]
 EOF
 # 如果有离线资源则复制进去
 [ -d frontend/assets/fontawesome ] && cp -r frontend/assets/* "$TMPDIR/assets/" 2>/dev/null || mkdir -p "$TMPDIR/assets"
-$CTR build -t "$REGISTRY/wg-nginx:$TAG" -f "$TMPDIR/Dockerfile" "$TMPDIR"
+$CTR build $BUILD_FMT -t "$REGISTRY/wg-nginx:$TAG" -f "$TMPDIR/Dockerfile" "$TMPDIR"
 rm -rf "$TMPDIR"
 echo "  ✓ $REGISTRY/wg-nginx:$TAG"
 echo ""
