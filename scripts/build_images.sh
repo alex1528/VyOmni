@@ -50,11 +50,11 @@ echo ""
 echo "[3/3] 构建 Nginx 镜像..."
 TMPDIR=$(mktemp -d)
 cp -r frontend/* "$TMPDIR/"
-cp nginx/monitor.conf "$TMPDIR/"
+cp nginx/monitor_container.conf "$TMPDIR/monitor.conf"
 cat > "$TMPDIR/Dockerfile" << 'EOF'
 FROM nginx:1.25-alpine
-RUN rm -f /etc/nginx/conf.d/default.conf && mkdir -p /etc/nginx/sites-enabled
-COPY monitor.conf /etc/nginx/sites-enabled/monitor.conf
+RUN rm -f /etc/nginx/conf.d/default.conf
+COPY monitor.conf /etc/nginx/conf.d/monitor.conf
 COPY index.html /var/www/monitor/
 COPY css/ /var/www/monitor/css/
 COPY js/ /var/www/monitor/js/
