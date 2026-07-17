@@ -67,35 +67,39 @@ monitor/
 
 ## 部署步骤
 
-### 总部
+### 统一部署（推荐）
+
+将仓库克隆到目标机器后执行统一入口脚本：
 
 ```bash
-cd /path/to/monitor
-chmod +x scripts/deploy_hq.sh
-./scripts/deploy_hq.sh
+git clone <repo-url> /opt/wg-monitor
+cd /opt/wg-monitor
+chmod +x install.sh
+./install.sh
 ```
 
-部署完成后编辑：
-1. `/etc/wg-monitor/config.json` — 填入各分支 peer 公钥映射
-2. `/etc/wg-monitor/secrets.json` — 填入各分支通信密钥
+脚本会自动：
+1. 检测环境（VyOS / 通用 Linux）
+2. 提示选择角色（总部 / 分支）
+3. 提示选择部署方式：
+   - VyOS 环境：原生 systemd / VyOS 容器（podman）
+   - 非 VyOS：Docker Compose / 原生 systemd
+4. 执行对应部署流程
 
-### 分支
+### 手动部署（高级）
+
+如需手动控制，也可直接执行对应脚本：
 
 ```bash
-cd /path/to/monitor
-chmod +x scripts/deploy_branch.sh
-./scripts/deploy_branch.sh
+# 总部原生
+bash scripts/deploy_hq.sh
+
+# 分支原生
+bash scripts/deploy_branch.sh
+
+# Docker Compose（非 VyOS）
+docker compose up -d --build
 ```
-
-按提示输入 branch_id、密钥和总部 IP。
-
-### 离线资源（可选）
-
-如果总部无外网，先在有网环境执行：
-```bash
-./scripts/download_assets.sh ./frontend/assets
-```
-然后将 `frontend/assets/` 目录复制到总部 `/var/www/monitor/assets/`。
 
 ## 安全设计
 

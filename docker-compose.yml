@@ -1,6 +1,8 @@
 # VyOS WireGuard Monitor - Docker Compose
-# 用于非 VyOS 环境的容器化部署（开发/测试/独立服务器）
-# VyOS 原生部署请使用 set container 命令，参见 scripts/container_deploy.md
+# 通过 install.sh 自动调用，或手动执行:
+#   docker compose up -d --build
+#
+# 非 VyOS 环境推荐方式；VyOS 原生容器请参见 scripts/container_deploy.md
 
 version: "3.8"
 
@@ -16,7 +18,7 @@ services:
       - WG_MONITOR_OUTPUT=/output
       - WG_MONITOR_INTERVAL=5
     volumes:
-      - ./config/config.json:/etc/wg-monitor/config.json:ro
+      - /etc/wg-monitor/config.json:/etc/wg-monitor/config.json:ro
       - monitor-data:/output
 
   # 总部聚合器 API
@@ -29,10 +31,10 @@ services:
     environment:
       - AGG_LISTEN_HOST=0.0.0.0
       - AGG_LISTEN_PORT=9100
-      - AGG_SECRETS=/etc/wg-monitor/secrets.json
+      - AGG_SECRETS=/secrets/secrets.json
       - AGG_OUTPUT_DIR=/output
     volumes:
-      - ./config/secrets.json:/etc/wg-monitor/secrets.json:ro
+      - /etc/wg-monitor/secrets.json:/secrets/secrets.json:ro
       - monitor-data:/output
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:9100/health',timeout=3)"]
