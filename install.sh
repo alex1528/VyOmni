@@ -319,7 +319,14 @@ deploy_hq_docker() {
 
     # 构建 & 启动
     echo "[3/3] 构建并启动容器..."
-    docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d --build
+    if command -v podman-compose &>/dev/null; then
+        podman-compose -f "$SCRIPT_DIR/docker-compose.yml" up -d --build
+    elif command -v docker &>/dev/null; then
+        docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d --build
+    else
+        echo -e "${RED}错误：未找到 docker 或 podman-compose${NC}"
+        exit 1
+    fi
 
     echo ""
     echo -e "${GREEN}✅ 总部 Docker Compose 部署完成！${NC}"
