@@ -10,3 +10,6 @@ __pycache__/
 # 本地临时文件
 *.tmp
 *.log
+git_commit.sh
+git_commit.bat
+PROJECT.md
