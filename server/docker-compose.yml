@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  aggregator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vyomni-aggregator
+    command: python3 -u aggregator.py
+    ports:
+      - "9100:9100"
+    volumes:
+      - shared-data:/data
+      - ./config.json:/app/config.json:ro
+      - ./secrets.json:/app/secrets.json:ro
+    restart: unless-stopped
+    networks:
+      - vyomni
+
+  alerter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vyomni-alerter
+    command: python3 -u alerter.py
+    volumes:
+      - shared-data:/data
+      - ./alert.json:/app/alert.json:ro
+    restart: unless-stopped
+    networks:
+      - vyomni
+    depends_on:
+      - aggregator
+
+  nginx:
+    image: nginx:alpine
+    container_name: vyomni-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ../frontend:/var/www/monitor:ro
+      - ../nginx/monitor.conf:/etc/nginx/conf.d/default.conf:ro
+      - shared-data:/var/www/monitor/data:ro
+      - assets:/var/www/monitor/assets:ro
+    restart: unless-stopped
+    networks:
+      - vyomni
+    depends_on:
+      - aggregator
+
+  # 首次启动时下载离线资源
+  asset-downloader:
+    image: alpine:3.19
+    container_name: vyomni-assets
+    command: >
+      sh -c "
+        if [ ! -f /assets/echarts.min.js ]; then
+          apk add --no-cache curl &&
+          curl -sL https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js -o /assets/echarts.min.js &&
+          echo 'ECharts downloaded.'
+        else
+          echo 'ECharts already exists.'
+        fi
+      "
+    volumes:
+      - assets:/assets
+    networks: []
+
+volumes:
+  shared-data:
+    driver: local
+  assets:
+    driver: local
+
+networks:
+  vyomni:
+    driver: bridge
