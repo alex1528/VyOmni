@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VyOS WireGuard 监控看板</title>
-    <!-- 离线资源 -->
+    <title>VyOmni 网络监控看板</title>
     <link rel="stylesheet" href="assets/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="css/dashboard.css">
 </head>
@@ -40,6 +39,9 @@
             <span class="data-freshness" id="data-freshness" title="数据新鲜度">
                 <i class="fas fa-circle"></i>
             </span>
+            <button class="theme-toggle" id="theme-toggle" title="切换主题">
+                <i class="fas fa-moon" id="theme-icon"></i>
+            </button>
         </div>
     </header>
 
@@ -47,22 +49,41 @@
         <!-- 维度1：Peer 隧道状态矩阵 -->
         <section class="section">
             <h2><i class="fas fa-shield-alt"></i> 隧道状态（维度1）</h2>
-            <div class="peer-grid" id="peer-grid">
-                <!-- 动态生成 -->
-            </div>
+            <div class="peer-grid" id="peer-grid"></div>
         </section>
 
         <!-- 维度2：分支资源矩阵 -->
         <section class="section">
             <h2><i class="fas fa-server"></i> 分支资源（维度2）</h2>
-            <div class="branch-grid" id="branch-grid">
-                <!-- 动态生成 -->
+            <div class="branch-grid" id="branch-grid"></div>
+        </section>
+
+        <!-- 网络拓扑可视化 -->
+        <section class="section">
+            <h2><i class="fas fa-project-diagram"></i> 网络拓扑</h2>
+            <div class="chart-panel topology-panel">
+                <div id="chart-topology" class="chart chart-large"></div>
+            </div>
+        </section>
+
+        <!-- 分支地图可视化 -->
+        <section class="section">
+            <h2><i class="fas fa-map-marked-alt"></i> 分支地图</h2>
+            <div class="chart-panel map-panel">
+                <div id="chart-map" class="chart chart-large"></div>
             </div>
         </section>
 
         <!-- 趋势分析区 -->
         <section class="section">
             <h2><i class="fas fa-chart-line"></i> 流量趋势</h2>
+            <div class="time-selector" id="time-selector">
+                <button class="time-btn active" data-window="60">5min</button>
+                <button class="time-btn" data-window="360">30min</button>
+                <button class="time-btn" data-window="720">1h</button>
+                <button class="time-btn" data-window="4320">6h</button>
+                <button class="time-btn" data-window="17280">24h</button>
+            </div>
             <div class="chart-container">
                 <div class="chart-panel">
                     <h3>隧道总带宽</h3>
@@ -83,6 +104,17 @@
             </div>
         </section>
     </main>
+
+    <!-- 模态弹窗 -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal-panel" id="modal-panel">
+            <div class="modal-header">
+                <h3 id="modal-title">详情</h3>
+                <button class="modal-close" id="modal-close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
 
     <!-- 告警音效 -->
     <audio id="alert-sound" preload="auto">
