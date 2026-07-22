@@ -433,3 +433,155 @@ body {
     .stat-item { font-size: 0.8em; }
     .card-metrics { grid-template-columns: 1fr; }
 }
+
+/* === 导航按钮 === */
+.nav-btn {
+    background: var(--bg-card, #1e2d3d);
+    border: 1px solid var(--border-color, #2a3a4a);
+    color: var(--text-secondary, #9aa0a6);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nav-btn:hover {
+    background: var(--accent-blue, #4fc3f7);
+    color: #fff;
+    border-color: var(--accent-blue, #4fc3f7);
+}
+
+.nav-btn.active {
+    background: var(--accent-blue, #4fc3f7);
+    color: #fff;
+    border-color: var(--accent-blue, #4fc3f7);
+}
+
+.nav-label {
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .nav-label { display: none; }
+}
+
+/* === 节点管理面板 === */
+.node-section {
+    background: var(--bg-secondary, #1a2332);
+    border: 1px solid var(--border-color, #2a3a4a);
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 16px;
+}
+
+.node-section h2 {
+    margin-bottom: 16px;
+}
+
+.node-toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, #2a3a4a);
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-sm { padding: 5px 10px; font-size: 0.8em; }
+.btn-primary { background: var(--accent-blue, #4fc3f7); color: #fff; border-color: var(--accent-blue); }
+.btn-primary:hover { opacity: 0.85; }
+.btn-success { background: var(--accent-green, #66bb6a); color: #fff; border-color: var(--accent-green); }
+.btn-danger { background: var(--accent-red, #ef5350); color: #fff; border-color: var(--accent-red); }
+
+/* 节点表格 */
+.node-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+}
+
+.node-table th,
+.node-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color, #2a3a4a);
+}
+
+.node-table th {
+    color: var(--text-secondary, #9aa0a6);
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.node-table tr:hover {
+    background: rgba(79, 195, 247, 0.05);
+}
+
+/* Token 部署命令框 */
+.deploy-cmd-box {
+    background: var(--bg-primary, #0f1419);
+    border: 1px solid var(--border-color, #2a3a4a);
+    border-radius: 6px;
+    padding: 16px;
+    margin: 12px 0;
+    position: relative;
+}
+
+.deploy-cmd-box code {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.9em;
+    word-break: break-all;
+    color: var(--accent-green, #66bb6a);
+}
+
+.copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    font-size: 0.75em;
+    background: var(--bg-card, #1e2d3d);
+    border: 1px solid var(--border-color, #2a3a4a);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.copy-btn:hover { background: var(--accent-blue); color: #fff; }
+.copy-btn.copied { background: var(--accent-green); color: #fff; }
+
+/* Token 状态标签 */
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75em;
+    font-weight: 600;
+}
+
+.badge-unused { background: rgba(79,195,247,0.15); color: var(--accent-blue); }
+.badge-used { background: rgba(102,187,106,0.15); color: var(--accent-green); }
+.badge-expired { background: rgba(239,83,80,0.15); color: var(--accent-red); }
+.badge-pending { background: rgba(255,167,38,0.15); color: var(--accent-orange, #ffa726); }
+.badge-approved { background: rgba(102,187,106,0.15); color: var(--accent-green); }
+.badge-rejected { background: rgba(239,83,80,0.15); color: var(--accent-red); }
+
+/* Token 倒计时 */
+.countdown {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}

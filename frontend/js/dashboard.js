@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCharts();
     initTimeSelector();
     initModal();
+    initNodeManagement();
     fetchConfig();
     poll();
     setInterval(poll, POLL_INTERVAL);
