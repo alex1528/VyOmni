@@ -1,15 +1,25 @@
-# 旧文件（已删除/重命名，防止误提交）
-/info.txt
-
 # 运行时产物
 __pycache__/
 *.pyc
-/frontend/assets/echarts.min.js
-/frontend/assets/fontawesome/
+*.pyo
+.credentials.json
+.upgrades/
 
-# 本地临时文件
+# 离线资源（需手动下载，不提交到仓库）
+frontend/assets/echarts.min.js
+frontend/assets/fontawesome/
+server/assets/
+
+# 构建产物
+dist/
+
+# 临时文件
 *.tmp
 *.log
-git_commit.sh
+*.bak
+
+# IDE
+.vscode/
+.idea/
 git_commit.bat
-PROJECT.md
+git_commit.sh

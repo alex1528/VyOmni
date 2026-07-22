@@ -62,6 +62,59 @@ register_token = vyomni-2025
 
 ---
 
+## 三B、推荐方式：curl|bash 一键部署（首选）
+
+> 此方式适用于所有 VyOS 节点（总部/分支），无需区分角色，无需手动复制文件。
+
+### 操作步骤
+
+**1. 管理员在看板生成部署 Token**
+
+看板 → 节点管理 → [+ 新增节点] → 输入名称 + 选择角色 → [生成部署命令]
+
+**2. 复制一键部署命令到目标 VyOS 执行**
+
+```bash
+curl -sL http://192.168.1.100:9100/api/deploy/tk_a8f3e2b1c9d4 | bash
+```
+
+**3. 自动完成的操作**
+
+脚本将自动执行以下步骤：
+1. 创建 `/opt/vyomni-agent/` 目录
+2. 从平台下载 `agent_common.py` + 对应主程序（`collector.py` 或 `branch_agent.py`）
+3. 写入 `config.conf`（含该 Token）
+4. 创建 `vyomni-agent.service` systemd 服务
+5. 启动服务 → Agent 自动注册 → 上线
+
+**4. 管理员审核**
+
+回到看板 → 节点管理 → 新节点显示为 "pending" → 点击 ✅ 审核通过
+
+### Token 说明
+
+| 属性 | 值 |
+|------|-----|
+| 格式 | `tk_` + 12位随机hex |
+| 有效期 | 24小时 |
+| 使用次数 | 一次性（注册后作废） |
+| 注册后通信 | 使用平台返回的专属 HMAC 密钥 |
+
+### 预期输出
+
+```
+[VyOmni Deploy] Downloading agent files...
+[VyOmni Deploy] Writing config...
+[VyOmni Deploy] Creating systemd service...
+[VyOmni Deploy] Starting service...
+[VyOmni Deploy] ✅ Deployment complete!
+[VyOmni Deploy] Check: systemctl status vyomni-agent
+```
+
+---
+
+> 以下为**手动部署方式**（适用于离线环境或需要自定义的场景）：
+
 ## 四、总部 VyOS Agent 部署
 
 ### 4.1 前提条件
