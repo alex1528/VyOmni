@@ -1,19 +1,18 @@
 {
-  "peer_map": {
-    "REPLACE_WITH_SHANGHAI_PUBLIC_KEY": {
-      "name": "华东-上海分部",
-      "branch_id": "branch-shanghai-01",
-      "region": "华东"
-    },
-    "REPLACE_WITH_BEIJING_PUBLIC_KEY": {
-      "name": "华北-北京分部",
-      "branch_id": "branch-beijing-01",
-      "region": "华北"
-    },
-    "REPLACE_WITH_GUANGZHOU_PUBLIC_KEY": {
-      "name": "华南-广州分部",
-      "branch_id": "branch-guangzhou-01",
-      "region": "华南"
-    }
+  "platform": {
+    "listen_port": 9100,
+    "data_dir": "/data"
+  },
+  "node_defaults": {
+    "hq_report_interval": 5,
+    "branch_report_interval": 10,
+    "hq_capabilities": ["system", "wireguard"],
+    "branch_capabilities": ["system", "interfaces"]
+  },
+  "geo_locations": {
+    "shanghai": {"lat": 31.23, "lng": 121.47, "label": "华东-上海"},
+    "beijing": {"lat": 39.90, "lng": 116.40, "label": "华北-北京"},
+    "guangzhou": {"lat": 23.13, "lng": 113.26, "label": "华南-广州"},
+    "chengdu": {"lat": 30.57, "lng": 104.07, "label": "西南-成都"}
   }
 }
