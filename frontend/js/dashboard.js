@@ -665,3 +665,295 @@ function escHtml(str) {
 function escAttr(str) {
     return (str || '').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
 }
+// ==================== 节点管理面板 ====================
+let nodesData = null;
+let nodesPollTimer = null;
+
+const NODE_API = {
+    list: '/api/nodes',
+    approve: (id) => `/api/nodes/${id}/approve`,
+    reject: (id) => `/api/nodes/${id}/reject`,
+    delete: (id) => `/api/nodes/${id}`,
+    config: (id) => `/api/nodes/${id}/config`,
+};
+
+// 初始化节点管理（在 DOMContentLoaded 中追加调用）
+function initNodeManagement() {
+    const navBtn = document.getElementById('nav-nodes');
+    if (navBtn) {
+        navBtn.addEventListener('click', () => {
+            showNodePanel();
+        });
+    }
+    // 如果存在节点面板容器，注入初始 HTML
+    const container = document.getElementById('node-panel');
+    if (container) {
+        container.innerHTML = getNodePanelHtml();
+        bindNodePanelEvents();
+    }
+}
+
+function getNodePanelHtml() {
+    return `
+    <div class="node-mgmt-panel">
+        <div class="node-panel-header">
+            <h2><i class="fas fa-server"></i> 节点管理</h2>
+            <div class="node-panel-actions">
+                <button class="btn btn-sm" id="btn-refresh-nodes"><i class="fas fa-sync-alt"></i> 刷新</button>
+                <select id="node-filter-status" class="node-filter-select">
+                    <option value="all">全部状态</option>
+                    <option value="pending">待审核</option>
+                    <option value="approved">已通过</option>
+                    <option value="rejected">已拒绝</option>
+                </select>
+                <select id="node-filter-role" class="node-filter-select">
+                    <option value="all">全部角色</option>
+                    <option value="hq">总部 HQ</option>
+                    <option value="branch">分支 Branch</option>
+                </select>
+            </div>
+        </div>
+        <div class="node-stats-bar" id="node-stats-bar"></div>
+        <div class="node-table-wrap">
+            <table class="node-table" id="node-table">
+                <thead>
+                    <tr>
+                        <th>节点 ID</th>
+                        <th>主机名</th>
+                        <th>角色</th>
+                        <th>IP</th>
+                        <th>版本</th>
+                        <th>状态</th>
+                        <th>上报间隔</th>
+                        <th>最后在线</th>
+                        <th>注册时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="node-table-body"></tbody>
+            </table>
+        </div>
+    </div>`;
+}
+
+function bindNodePanelEvents() {
+    const refreshBtn = document.getElementById('btn-refresh-nodes');
+    if (refreshBtn) refreshBtn.addEventListener('click', fetchNodes);
+
+    const filterStatus = document.getElementById('node-filter-status');
+    if (filterStatus) filterStatus.addEventListener('change', renderNodeTable);
+
+    const filterRole = document.getElementById('node-filter-role');
+    if (filterRole) filterRole.addEventListener('change', renderNodeTable);
+}
+
+function showNodePanel() {
+    const panel = document.getElementById('node-panel');
+    if (panel) {
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        if (panel.style.display === 'block') {
+            if (!panel.innerHTML.trim()) {
+                panel.innerHTML = getNodePanelHtml();
+                bindNodePanelEvents();
+            }
+            fetchNodes();
+            // 开始轮询
+            if (!nodesPollTimer) {
+                nodesPollTimer = setInterval(fetchNodes, 10000);
+            }
+        } else {
+            if (nodesPollTimer) { clearInterval(nodesPollTimer); nodesPollTimer = null; }
+        }
+    }
+}
+
+async function fetchNodes() {
+    const data = await fetchJSON(NODE_API.list);
+    if (data && data.nodes) {
+        nodesData = data.nodes;
+        renderNodeStats();
+        renderNodeTable();
+    }
+}
+
+function renderNodeStats() {
+    const el = document.getElementById('node-stats-bar');
+    if (!el || !nodesData) return;
+    const total = nodesData.length;
+    const pending = nodesData.filter(n => n.status === 'pending').length;
+    const approved = nodesData.filter(n => n.status === 'approved').length;
+    const rejected = nodesData.filter(n => n.status === 'rejected').length;
+    const now = Math.floor(Date.now() / 1000);
+    const online = nodesData.filter(n => n.status === 'approved' && now - n.last_seen < 60).length;
+
+    el.innerHTML = `
+        <div class="node-stat"><span class="node-stat-num">${total}</span><span class="node-stat-label">总节点</span></div>
+        <div class="node-stat pending"><span class="node-stat-num">${pending}</span><span class="node-stat-label">待审核</span></div>
+        <div class="node-stat approved"><span class="node-stat-num">${approved}</span><span class="node-stat-label">已通过</span></div>
+        <div class="node-stat online"><span class="node-stat-num">${online}</span><span class="node-stat-label">在线</span></div>
+        <div class="node-stat rejected"><span class="node-stat-num">${rejected}</span><span class="node-stat-label">已拒绝</span></div>
+    `;
+}
+
+function renderNodeTable() {
+    const tbody = document.getElementById('node-table-body');
+    if (!tbody || !nodesData) return;
+
+    const statusFilter = document.getElementById('node-filter-status')?.value || 'all';
+    const roleFilter = document.getElementById('node-filter-role')?.value || 'all';
+
+    let filtered = nodesData;
+    if (statusFilter !== 'all') filtered = filtered.filter(n => n.status === statusFilter);
+    if (roleFilter !== 'all') filtered = filtered.filter(n => n.role === roleFilter);
+
+    const now = Math.floor(Date.now() / 1000);
+
+    tbody.innerHTML = filtered.map(node => {
+        const isOnline = node.status === 'approved' && now - node.last_seen < 60;
+        const statusBadge = getNodeStatusBadge(node.status);
+        const roleBadge = node.role === 'hq'
+            ? '<span class="role-badge hq">HQ</span>'
+            : '<span class="role-badge branch">Branch</span>';
+        const lastSeen = node.last_seen ? formatTimeAgo(now - node.last_seen) : '从未';
+        const regTime = node.registered_at ? formatDateTime(node.registered_at) : '-';
+
+        let actions = '';
+        if (node.status === 'pending') {
+            actions = `
+                <button class="btn btn-xs btn-approve" onclick="nodeAction('approve','${escAttr(node.node_id)}')">
+                    <i class="fas fa-check"></i> 通过
+                </button>
+                <button class="btn btn-xs btn-reject" onclick="nodeAction('reject','${escAttr(node.node_id)}')">
+                    <i class="fas fa-times"></i> 拒绝
+                </button>`;
+        } else if (node.status === 'approved') {
+            actions = `
+                <button class="btn btn-xs btn-config" onclick="showNodeConfig('${escAttr(node.node_id)}')">
+                    <i class="fas fa-cog"></i> 配置
+                </button>`;
+        }
+        actions += `
+            <button class="btn btn-xs btn-delete" onclick="nodeAction('delete','${escAttr(node.node_id)}')">
+                <i class="fas fa-trash"></i>
+            </button>`;
+
+        return `
+        <tr class="${isOnline ? 'row-online' : ''} ${node.status === 'pending' ? 'row-pending' : ''}">
+            <td class="node-id-cell" title="${escAttr(node.node_id)}">${escHtml(node.node_id.length > 20 ? node.node_id.slice(0,20)+'...' : node.node_id)}</td>
+            <td>${escHtml(node.hostname)}</td>
+            <td>${roleBadge}</td>
+            <td><code>${escHtml(node.ip)}</code></td>
+            <td><code>${escHtml(node.version || '-')}</code></td>
+            <td>${statusBadge}</td>
+            <td>${node.report_interval}s</td>
+            <td>${lastSeen}</td>
+            <td>${regTime}</td>
+            <td class="actions-cell">${actions}</td>
+        </tr>`;
+    }).join('');
+}
+
+function getNodeStatusBadge(status) {
+    const map = {
+        'pending': '<span class="status-badge pending"><i class="fas fa-clock"></i> 待审核</span>',
+        'approved': '<span class="status-badge approved"><i class="fas fa-check-circle"></i> 已通过</span>',
+        'rejected': '<span class="status-badge rejected"><i class="fas fa-ban"></i> 已拒绝</span>',
+    };
+    return map[status] || `<span class="status-badge">${status}</span>`;
+}
+
+async function nodeAction(action, nodeId) {
+    if (action === 'delete') {
+        if (!confirm(`确定删除节点 ${nodeId}？此操作不可逆。`)) return;
+        const resp = await fetch(NODE_API.delete(nodeId), { method: 'DELETE' });
+        if (resp.ok) { fetchNodes(); addAlert('info', `节点已删除: ${nodeId}`); }
+    } else if (action === 'approve') {
+        const resp = await fetch(NODE_API.approve(nodeId), { method: 'POST' });
+        if (resp.ok) { fetchNodes(); addAlert('info', `节点已审核通过: ${nodeId}`); }
+    } else if (action === 'reject') {
+        const resp = await fetch(NODE_API.reject(nodeId), { method: 'POST' });
+        if (resp.ok) { fetchNodes(); addAlert('info', `节点已拒绝: ${nodeId}`); }
+    }
+}
+
+function showNodeConfig(nodeId) {
+    const node = nodesData?.find(n => n.node_id === nodeId);
+    if (!node) return;
+
+    const html = `
+    <div class="node-config-form">
+        <h4>动态配置下发 — ${escHtml(node.hostname)}</h4>
+        <div class="form-group">
+            <label>上报间隔（秒）</label>
+            <input type="number" id="cfg-interval" value="${node.report_interval || 10}" min="1" max="3600" />
+        </div>
+        <div class="form-group">
+            <label>采集项（逗号分隔）</label>
+            <input type="text" id="cfg-capabilities" value="${(node.capabilities || []).join(',')}" placeholder="system,interfaces,wireguard" />
+        </div>
+        <div class="form-group">
+            <label>自定义标签（JSON）</label>
+            <textarea id="cfg-labels" rows="3" placeholder='{"region":"east","env":"prod"}'>${JSON.stringify(node.custom_labels || {}, null, 2)}</textarea>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-primary" onclick="submitNodeConfig('${escAttr(nodeId)}')">
+                <i class="fas fa-paper-plane"></i> 下发配置
+            </button>
+            <button class="btn" onclick="closeModal()">取消</button>
+        </div>
+    </div>`;
+
+    openModal(`节点配置: ${nodeId}`, html);
+}
+
+async function submitNodeConfig(nodeId) {
+    const interval = document.getElementById('cfg-interval')?.value;
+    const capsStr = document.getElementById('cfg-capabilities')?.value;
+    const labelsStr = document.getElementById('cfg-labels')?.value;
+
+    const configData = {};
+    if (interval) configData.report_interval = parseInt(interval);
+    if (capsStr) configData.capabilities = capsStr.split(',').map(s => s.trim()).filter(Boolean);
+    if (labelsStr) {
+        try { configData.custom_labels = JSON.parse(labelsStr); }
+        catch(e) { alert('自定义标签 JSON 格式错误'); return; }
+    }
+
+    const resp = await fetch(NODE_API.config(nodeId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(configData),
+    });
+
+    if (resp.ok) {
+        closeModal();
+        addAlert('info', `配置已下发到 ${nodeId}（下次上报时生效）`);
+        fetchNodes();
+    } else {
+        alert('配置下发失败');
+    }
+}
+
+// 工具函数：时间前显示
+function formatTimeAgo(seconds) {
+    if (seconds < 0) return '刚刚';
+    if (seconds < 60) return `${seconds}s 前`;
+    if (seconds < 3600) return `${Math.floor(seconds/60)}m 前`;
+    if (seconds < 86400) return `${Math.floor(seconds/3600)}h 前`;
+    return `${Math.floor(seconds/86400)}d 前`;
+}
+
+function formatDateTime(unixTs) {
+    if (!unixTs) return '-';
+    const d = new Date(unixTs * 1000);
+    return d.toLocaleDateString('zh-CN') + ' ' + d.toLocaleTimeString('zh-CN', {hour12:false, hour:'2-digit', minute:'2-digit'});
+}
+
+// 在 DOMContentLoaded 时追加初始化
+(function() {
+    const origInit = window.onload;
+    // 延迟初始化，确保 DOM 就绪
+    setTimeout(() => {
+        initNodeManagement();
+    }, 100);
+})();
