@@ -43,10 +43,12 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ../frontend:/var/www/monitor:ro
-      - ../nginx/monitor.conf:/etc/nginx/conf.d/default.conf:ro
-      - shared-data:/var/www/monitor/data:ro
+      - ../frontend/index.html:/var/www/monitor/index.html:ro
+      - ../frontend/css:/var/www/monitor/css:ro
+      - ../frontend/js:/var/www/monitor/js:ro
       - ./assets:/var/www/monitor/assets:ro
+      - shared-data:/var/www/monitor/data:ro
+      - ../nginx/monitor.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
     networks:
       - vyomni
