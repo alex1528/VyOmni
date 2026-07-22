@@ -2,6 +2,7 @@
 """
 VyOmni Agent Common — 公共逻辑模块
 提供：节点自注册、HMAC签名上报、动态配置应用、远程升级
+兼容一次性 tk_ Token 格式
 """
 
 import json
@@ -18,7 +19,7 @@ import socket
 import shutil
 
 # === 常量 ===
-AGENT_VERSION = '2.0.0'
+AGENT_VERSION = '2.1.0'
 CREDENTIAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.credentials.json')
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.conf')
 UPGRADE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.upgrades')
@@ -26,7 +27,7 @@ UPGRADE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.upgrade
 
 # === 配置加载 ===
 def load_config():
-    """加载极简配置文件（仅 server_url + register_token）"""
+    """加载极简配置文件（server_url + register_token）"""
     config = {
         'server_url': 'http://192.168.1.100:9100',
         'register_token': 'vyomni-2025',
@@ -113,6 +114,7 @@ def save_credentials(creds):
 def register_node(config, capabilities=None):
     """
     首次启动注册节点
+    支持传统固定 Token 和一次性 tk_ Token
     返回: credentials dict 或 None
     """
     # 检查是否已注册
@@ -123,8 +125,14 @@ def register_node(config, capabilities=None):
 
     # 准备注册数据
     node_id = get_node_id()
-    role = detect_role()
     hostname = socket.gethostname()
+
+    # 检测 register_token 的类型来决定角色
+    register_token = config['register_token']
+
+    # 如果是一次性 Token（tk_ 前缀），角色由服务端的 Token 记录决定
+    # 本地仍做检测以作为 fallback
+    role = detect_role()
 
     if capabilities is None:
         capabilities = ['system']
@@ -140,7 +148,7 @@ def register_node(config, capabilities=None):
         'capabilities': capabilities,
         'version': AGENT_VERSION,
         'ip': get_local_ip(),
-        'register_token': config['register_token'],
+        'register_token': register_token,
     }
 
     url = config['server_url'].rstrip('/') + '/register'
@@ -165,9 +173,18 @@ def register_node(config, capabilities=None):
                     'report_interval': result.get('report_interval', 10),
                     'status': result.get('status', 'pending'),
                     'registered_at': int(time.time()),
+                    'token_type': 'onetime' if register_token.startswith('tk_') else 'static',
                 }
                 save_credentials(creds)
-                print(f'[INFO] Registered successfully: node_id={node_id}, role={role}, status={creds["status"]}')
+
+                # 一次性 Token 注册成功后，Token 已由服务端作废
+                # 后续通信使用专属 hmac_key
+                if register_token.startswith('tk_'):
+                    print(f'[INFO] Registered with one-time token: node_id={node_id}, role={role}, status={creds["status"]}')
+                    print(f'[INFO] Token consumed. Future communication uses HMAC key.')
+                else:
+                    print(f'[INFO] Registered successfully: node_id={node_id}, role={role}, status={creds["status"]}')
+
                 return creds
             else:
                 print(f'[ERROR] Registration failed: HTTP {resp.status}', file=sys.stderr)

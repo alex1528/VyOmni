@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-VyOmni Aggregator — 集中式数据聚合器（v2.0）
+VyOmni Aggregator — 集中式数据聚合器（v2.1）
 节点注册 + HMAC验证 + 动态配置下发 + 远程升级管理 + 节点审核
++ 一次性Token生成 + curl|bash 一键部署端点
 """
 
 import json
@@ -12,6 +13,7 @@ import os
 import sys
 import secrets
 import shutil
+import re
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from threading import Lock
 from urllib.parse import urlparse, parse_qs
@@ -22,9 +24,11 @@ LISTEN_PORT = int(os.environ.get('LISTEN_PORT', '9100'))
 REGISTER_TOKEN = os.environ.get('REGISTER_TOKEN', 'vyomni-2025')
 TIME_WINDOW = 120  # 签名有效窗口（秒）
 DEFAULT_REPORT_INTERVAL = 10
+AGENT_FILES_DIR = os.environ.get('AGENT_FILES_DIR', '/opt/vyomni-server/agent')
 
 # === 数据文件路径 ===
 NODES_FILE = os.path.join(DATA_DIR, 'nodes.json')
+TOKENS_FILE = os.path.join(DATA_DIR, 'tokens.json')
 UPGRADE_DIR = os.path.join(DATA_DIR, 'upgrades')
 
 # === 状态存储 ===
@@ -33,6 +37,7 @@ nodes = {}  # node_id -> node_info
 hq_state = {}  # 最近一次总部上报
 branch_states = {}  # branch_id -> 最近一次分支上报
 upgrade_info = None  # 当前可用升级信息
+deploy_tokens = {}  # token_str -> token_info
 
 
 # === 持久化 ===
@@ -54,6 +59,24 @@ def save_nodes():
         json.dump(nodes, f, indent=2, ensure_ascii=False)
 
 
+def load_tokens():
+    """从 JSON 文件加载部署 Token 数据"""
+    global deploy_tokens
+    if os.path.exists(TOKENS_FILE):
+        try:
+            with open(TOKENS_FILE) as f:
+                deploy_tokens = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            deploy_tokens = {}
+
+
+def save_tokens():
+    """保存部署 Token 数据到 JSON 文件"""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(TOKENS_FILE, 'w') as f:
+        json.dump(deploy_tokens, f, indent=2, ensure_ascii=False)
+
+
 def load_upgrade_info():
     """加载升级信息"""
     global upgrade_info
@@ -64,6 +87,65 @@ def load_upgrade_info():
                 upgrade_info = json.load(f)
         except (json.JSONDecodeError, IOError):
             upgrade_info = None
+
+
+# === Token 管理 ===
+def generate_deploy_token(name, role):
+    """生成一次性部署 Token（tk_ + 12位hex，24小时有效）"""
+    token_str = 'tk_' + secrets.token_hex(6)
+    now = int(time.time())
+    expires_at = now + 86400  # 24小时
+
+    token_info = {
+        'token': token_str,
+        'name': name,
+        'role': role,
+        'status': 'unused',  # unused / used / expired
+        'created_at': now,
+        'expires_at': expires_at,
+        'used_at': None,
+        'used_by_node': None,
+    }
+
+    deploy_tokens[token_str] = token_info
+    save_tokens()
+    return token_info
+
+
+def validate_deploy_token(token_str):
+    """验证部署 Token，返回 token_info 或 None"""
+    token_info = deploy_tokens.get(token_str)
+    if not token_info:
+        return None
+    if token_info['status'] != 'unused':
+        return None
+    if int(time.time()) > token_info['expires_at']:
+        token_info['status'] = 'expired'
+        save_tokens()
+        return None
+    return token_info
+
+
+def consume_deploy_token(token_str, node_id):
+    """消费（作废）一次性 Token"""
+    token_info = deploy_tokens.get(token_str)
+    if token_info:
+        token_info['status'] = 'used'
+        token_info['used_at'] = int(time.time())
+        token_info['used_by_node'] = node_id
+        save_tokens()
+
+
+def cleanup_expired_tokens():
+    """清理过期 Token"""
+    now = int(time.time())
+    changed = False
+    for tk, info in deploy_tokens.items():
+        if info['status'] == 'unused' and now > info['expires_at']:
+            info['status'] = 'expired'
+            changed = True
+    if changed:
+        save_tokens()
 
 
 # === HMAC 验证 ===
@@ -110,7 +192,6 @@ def write_status_files():
     # status-branches.json — 仅包含 approved 节点
     branches = []
     for bid, bstate in branch_states.items():
-        # 检查节点是否已审核通过
         node_id = bstate.get('node_id', bid)
         node_info = nodes.get(node_id, {})
         if node_info.get('status') != 'approved':
@@ -146,7 +227,6 @@ def build_report_response(node_id):
     pending_config = node_info.get('pending_config')
     if pending_config:
         response['config_update'] = pending_config
-        # 清除待下发配置
         node_info.pop('pending_config', None)
         save_nodes()
 
@@ -162,6 +242,102 @@ def build_report_response(node_id):
     return response
 
 
+# === 生成部署脚本 ===
+def generate_deploy_script(token_str, token_info, server_url):
+    """生成 curl|bash 一键部署脚本"""
+    role = token_info['role']
+    name = token_info['name']
+
+    # 根据角色决定下载哪个 agent 脚本
+    if role == 'hq':
+        agent_script = 'collector.py'
+    else:
+        agent_script = 'branch_agent.py'
+
+    lines = [
+        '#!/bin/bash',
+        '# ============================================',
+        '# VyOmni Agent 一键部署脚本',
+        '# 节点名称: ' + name,
+        '# 角色: ' + role,
+        '# Token: ' + token_str,
+        '# ============================================',
+        '',
+        'set -e',
+        '',
+        'INSTALL_DIR="/opt/vyomni-agent"',
+        'SERVER_URL="' + server_url + '"',
+        'TOKEN="' + token_str + '"',
+        'ROLE="' + role + '"',
+        'AGENT_SCRIPT="' + agent_script + '"',
+        '',
+        'echo "=========================================="',
+        'echo " VyOmni Agent 自动部署"',
+        'echo " 节点: ' + name + '"',
+        'echo " 角色: ' + role + '"',
+        'echo "=========================================="',
+        'echo ""',
+        '',
+        '# 1. 创建安装目录',
+        'echo "[1/5] 创建安装目录..."',
+        'mkdir -p "$INSTALL_DIR"',
+        'cd "$INSTALL_DIR"',
+        '',
+        '# 2. 下载 Agent 文件',
+        'echo "[2/5] 下载 Agent 文件..."',
+        'curl -sL "${SERVER_URL}/api/deploy/files/agent_common.py" -o agent_common.py',
+        'curl -sL "${SERVER_URL}/api/deploy/files/${AGENT_SCRIPT}" -o "${AGENT_SCRIPT}"',
+        'chmod +x agent_common.py "${AGENT_SCRIPT}"',
+        'echo "  已下载: agent_common.py, ${AGENT_SCRIPT}"',
+        '',
+        '# 3. 写入配置文件',
+        'echo "[3/5] 写入配置文件..."',
+        'cat > config.conf << CONF_EOF',
+        '# VyOmni Agent 配置',
+        'server_url = ' + server_url,
+        'register_token = ' + token_str,
+        'CONF_EOF',
+        'echo "  配置文件: $INSTALL_DIR/config.conf"',
+        '',
+        '# 4. 创建 systemd 服务',
+        'echo "[4/5] 创建 systemd 服务..."',
+        'cat > /etc/systemd/system/vyomni-agent.service << SVC_EOF',
+        '[Unit]',
+        'Description=VyOmni Agent (' + name + ')',
+        'After=network-online.target',
+        'Wants=network-online.target',
+        '',
+        '[Service]',
+        'Type=simple',
+        'WorkingDirectory=/opt/vyomni-agent',
+        'ExecStart=/usr/bin/python3 /opt/vyomni-agent/' + agent_script,
+        'Restart=always',
+        'RestartSec=10',
+        'StandardOutput=journal',
+        'StandardError=journal',
+        '',
+        '[Install]',
+        'WantedBy=multi-user.target',
+        'SVC_EOF',
+        '',
+        'systemctl daemon-reload',
+        '',
+        '# 5. 启动服务',
+        'echo "[5/5] 启动服务..."',
+        'systemctl enable vyomni-agent',
+        'systemctl start vyomni-agent',
+        '',
+        'echo ""',
+        'echo "=========================================="',
+        'echo " 部署完成！"',
+        'echo " 安装目录: $INSTALL_DIR"',
+        'echo " 查看日志: journalctl -u vyomni-agent -f"',
+        'echo "=========================================="',
+    ]
+
+    return chr(10).join(lines) + chr(10)
+
+
 # === HTTP Handler ===
 class ApiHandler(BaseHTTPRequestHandler):
 
@@ -169,6 +345,15 @@ class ApiHandler(BaseHTTPRequestHandler):
         body = json.dumps(data, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_text(self, status, text, content_type='text/plain'):
+        body = text.encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
@@ -204,6 +389,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.handle_set_config(node_id)
         elif path == '/api/upgrade':
             self.handle_upload_upgrade()
+        elif path == '/api/tokens/generate':
+            self.handle_generate_token()
         else:
             self.send_json(404, {'error': 'not found'})
 
@@ -216,6 +403,14 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.handle_list_nodes()
         elif path == '/api/upgrade/latest':
             self.handle_download_upgrade()
+        elif path == '/api/tokens':
+            self.handle_list_tokens()
+        elif re.match(r'^/api/deploy/tk_[0-9a-f]{12}$', path):
+            token_str = path.split('/')[-1]
+            self.handle_deploy_script(token_str)
+        elif path.startswith('/api/deploy/files/'):
+            filename = path.split('/')[-1]
+            self.handle_deploy_file(filename)
         else:
             self.send_json(404, {'error': 'not found'})
 
@@ -227,6 +422,115 @@ class ApiHandler(BaseHTTPRequestHandler):
         else:
             self.send_json(404, {'error': 'not found'})
 
+    # --- Token 生成 ---
+    def handle_generate_token(self):
+        """POST /api/tokens/generate — 生成一次性部署 Token"""
+        body = self.read_body()
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_json(400, {'error': 'invalid JSON'})
+            return
+
+        name = payload.get('name', '').strip()
+        role = payload.get('role', 'branch').strip()
+
+        if not name:
+            self.send_json(400, {'error': 'name is required'})
+            return
+
+        if role not in ('hq', 'branch'):
+            self.send_json(400, {'error': 'role must be hq or branch'})
+            return
+
+        with state_lock:
+            token_info = generate_deploy_token(name, role)
+
+        # 构建部署命令
+        host = self.headers.get('Host', 'localhost:' + str(LISTEN_PORT))
+        scheme = 'http'
+        server_url = scheme + '://' + host
+        deploy_cmd = 'curl -sL ' + server_url + '/api/deploy/' + token_info['token'] + ' | bash'
+
+        print('[TOKEN] Generated: ' + token_info['token'] + ' for "' + name + '" (role=' + role + ')')
+
+        self.send_json(200, {
+            'token': token_info['token'],
+            'name': name,
+            'role': role,
+            'expires_at': token_info['expires_at'],
+            'deploy_cmd': deploy_cmd,
+            'config_content': 'server_url = ' + server_url + '\nregister_token = ' + token_info['token'],
+        })
+
+    # --- Token 列表 ---
+    def handle_list_tokens(self):
+        """GET /api/tokens — 列出所有部署 Token"""
+        with state_lock:
+            cleanup_expired_tokens()
+            token_list = []
+            for tk, info in deploy_tokens.items():
+                token_list.append({
+                    'token': info['token'],
+                    'name': info['name'],
+                    'role': info['role'],
+                    'status': info['status'],
+                    'created_at': info['created_at'],
+                    'expires_at': info['expires_at'],
+                    'used_at': info.get('used_at'),
+                    'used_by_node': info.get('used_by_node'),
+                })
+        self.send_json(200, {'tokens': token_list})
+
+    # --- 部署脚本端点 ---
+    def handle_deploy_script(self, token_str):
+        """GET /api/deploy/{token} — 返回部署 bash 脚本"""
+        with state_lock:
+            token_info = validate_deploy_token(token_str)
+
+        if not token_info:
+            error_script = '#!/bin/bash\necho "ERROR: Token 无效、已使用或已过期"\nexit 1\n'
+            self.send_text(403, error_script.replace('\\n', '\n'), 'text/x-shellscript')
+            return
+
+        # 推断 server_url
+        host = self.headers.get('Host', 'localhost:' + str(LISTEN_PORT))
+        server_url = 'http://' + host
+
+        script = generate_deploy_script(token_str, token_info, server_url)
+        self.send_text(200, script, 'text/x-shellscript')
+
+    # --- Agent 文件下载 ---
+    def handle_deploy_file(self, filename):
+        """GET /api/deploy/files/{filename} — 提供 Agent 文件下载"""
+        # 白名单文件
+        allowed_files = {'agent_common.py', 'collector.py', 'branch_agent.py'}
+        if filename not in allowed_files:
+            self.send_json(404, {'error': 'file not found: ' + filename})
+            return
+
+        # 查找文件路径
+        file_path = os.path.join(AGENT_FILES_DIR, filename)
+        if not os.path.exists(file_path):
+            # 尝试相对路径（../agent/）
+            alt_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'agent', filename)
+            if os.path.exists(alt_path):
+                file_path = alt_path
+            else:
+                self.send_json(404, {'error': 'file not available: ' + filename})
+                return
+
+        with open(file_path, 'rb') as f:
+            data = f.read()
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/octet-stream')
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Content-Disposition', 'attachment; filename="' + filename + '"')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(data)
+
     # --- Registration ---
     def handle_register(self):
         body = self.read_body()
@@ -236,21 +540,32 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.send_json(400, {'error': 'invalid JSON'})
             return
 
-        # 验证注册令牌
+        # 验证注册令牌（兼容一次性 tk_ Token）
         token = payload.get('register_token', '')
-        if token != REGISTER_TOKEN:
-            self.send_json(403, {'error': 'invalid register_token'})
-            return
-
-        node_id = payload.get('node_id', '')
-        if not node_id:
-            self.send_json(400, {'error': 'node_id required'})
-            return
 
         with state_lock:
+            # 检查是否为一次性部署 Token（tk_ 前缀）
+            if token.startswith('tk_'):
+                token_info = validate_deploy_token(token)
+                if not token_info:
+                    self.send_json(403, {'error': 'invalid or expired deploy token'})
+                    return
+            else:
+                # 传统固定 Token
+                if token != REGISTER_TOKEN:
+                    self.send_json(403, {'error': 'invalid register_token'})
+                    return
+
+            node_id = payload.get('node_id', '')
+            if not node_id:
+                self.send_json(400, {'error': 'node_id required'})
+                return
+
             # 检查是否已注册
             if node_id in nodes:
                 existing = nodes[node_id]
+                if token.startswith('tk_'):
+                    consume_deploy_token(token, node_id)
                 self.send_json(200, {
                     'hmac_key': existing['hmac_key'],
                     'report_interval': existing.get('report_interval', DEFAULT_REPORT_INTERVAL),
@@ -261,6 +576,10 @@ class ApiHandler(BaseHTTPRequestHandler):
             # 生成专属 HMAC key
             hmac_key = secrets.token_hex(32)
 
+            # 如果使用一次性 Token，自动审核通过
+            auto_approve = token.startswith('tk_')
+            initial_status = 'approved' if auto_approve else 'pending'
+
             node_info = {
                 'node_id': node_id,
                 'role': payload.get('role', 'unknown'),
@@ -269,22 +588,33 @@ class ApiHandler(BaseHTTPRequestHandler):
                 'version': payload.get('version', ''),
                 'ip': payload.get('ip', ''),
                 'hmac_key': hmac_key,
-                'status': 'pending',  # 待审核
+                'status': initial_status,
                 'report_interval': DEFAULT_REPORT_INTERVAL,
                 'registered_at': int(time.time()),
                 'last_seen': 0,
                 'custom_labels': {},
             }
 
+            # 如果有 Token 的 name，也作为 label
+            if token.startswith('tk_'):
+                tk_info = deploy_tokens.get(token, {})
+                node_info['custom_labels']['deploy_name'] = tk_info.get('name', '')
+                if not node_info['hostname']:
+                    node_info['hostname'] = tk_info.get('name', '')
+
             nodes[node_id] = node_info
             save_nodes()
 
-        print(f'[REGISTER] New node: {node_id} (role={payload.get("role")}, ip={payload.get("ip")})')
+            # 消费一次性 Token
+            if token.startswith('tk_'):
+                consume_deploy_token(token, node_id)
+
+        print('[REGISTER] New node: ' + node_id + ' (role=' + payload.get('role', '') + ', status=' + initial_status + ')')
 
         self.send_json(200, {
             'hmac_key': hmac_key,
             'report_interval': DEFAULT_REPORT_INTERVAL,
-            'status': 'pending',
+            'status': initial_status,
         })
 
     # --- Report ---
@@ -294,12 +624,10 @@ class ApiHandler(BaseHTTPRequestHandler):
         sig = self.headers.get('X-Signature', '')
         node_id = self.headers.get('X-Node-ID', '')
 
-        # 查找节点的 HMAC key
         with state_lock:
             node_info = nodes.get(node_id)
 
         if not node_info:
-            # 兼容旧版（无 X-Node-ID 的情况），尝试从 payload 获取
             try:
                 payload = json.loads(body)
                 node_id = payload.get('node_id', '')
@@ -327,26 +655,21 @@ class ApiHandler(BaseHTTPRequestHandler):
         role = payload.get('role', '')
 
         with state_lock:
-            # 更新节点最后见时间
             node_info['last_seen'] = int(time.time())
             if payload.get('version'):
                 node_info['version'] = payload['version']
 
             if role == 'hq':
                 hq_state.update(payload)
-                print(f'[{time.strftime("%H:%M:%S")}] HQ report: {len(payload.get("peers", []))} peers')
             elif role == 'branch':
                 bid = payload.get('branch_id', payload.get('node_id', 'unknown'))
                 branch_states[bid] = payload
-                print(f'[{time.strftime("%H:%M:%S")}] Branch report: {bid}')
             else:
                 self.send_json(400, {'error': 'unknown role'})
                 return
 
             save_nodes()
             write_status_files()
-
-            # 构建响应
             response = build_report_response(node_id)
 
         self.send_json(200, response)
@@ -379,7 +702,6 @@ class ApiHandler(BaseHTTPRequestHandler):
             nodes[node_id]['status'] = 'approved'
             nodes[node_id].setdefault('pending_config', {})['status'] = 'approved'
             save_nodes()
-        print(f'[APPROVE] Node approved: {node_id}')
         self.send_json(200, {'status': 'approved', 'node_id': node_id})
 
     def handle_reject(self, node_id):
@@ -390,7 +712,6 @@ class ApiHandler(BaseHTTPRequestHandler):
             nodes[node_id]['status'] = 'rejected'
             nodes[node_id].setdefault('pending_config', {})['status'] = 'rejected'
             save_nodes()
-        print(f'[REJECT] Node rejected: {node_id}')
         self.send_json(200, {'status': 'rejected', 'node_id': node_id})
 
     def handle_delete_node(self, node_id):
@@ -399,11 +720,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self.send_json(404, {'error': 'node not found'})
                 return
             del nodes[node_id]
-            # 清理 branch_states
             branch_states.pop(node_id, None)
             save_nodes()
             write_status_files()
-        print(f'[DELETE] Node deleted: {node_id}')
         self.send_json(200, {'status': 'deleted', 'node_id': node_id})
 
     def handle_set_config(self, node_id):
@@ -420,7 +739,6 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self.send_json(404, {'error': 'node not found'})
                 return
 
-            # 合并到 pending_config
             pending = nodes[node_id].get('pending_config', {})
             if 'report_interval' in config_data:
                 pending['report_interval'] = int(config_data['report_interval'])
@@ -435,7 +753,6 @@ class ApiHandler(BaseHTTPRequestHandler):
             nodes[node_id]['pending_config'] = pending
             save_nodes()
 
-        print(f'[CONFIG] Config queued for {node_id}: {config_data}')
         self.send_json(200, {'status': 'config_queued', 'node_id': node_id})
 
     # --- Upgrade Management ---
@@ -447,24 +764,18 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
 
         body = self.rfile.read(content_length)
-
-        # 从 header 获取版本号
         version = self.headers.get('X-Agent-Version', '')
         if not version:
             self.send_json(400, {'error': 'X-Agent-Version header required'})
             return
 
         os.makedirs(UPGRADE_DIR, exist_ok=True)
-
-        # 保存文件
-        file_path = os.path.join(UPGRADE_DIR, f'agent_{version}.py')
+        file_path = os.path.join(UPGRADE_DIR, 'agent_' + version + '.py')
         with open(file_path, 'wb') as f:
             f.write(body)
 
-        # 计算 SHA256
         sha256 = hashlib.sha256(body).hexdigest()
 
-        # 更新升级信息
         global upgrade_info
         upgrade_info = {
             'version': version,
@@ -478,7 +789,6 @@ class ApiHandler(BaseHTTPRequestHandler):
         with open(info_path, 'w') as f:
             json.dump(upgrade_info, f, indent=2)
 
-        print(f'[UPGRADE] New version uploaded: v{version} ({len(body)} bytes, sha256={sha256[:16]}...)')
         self.send_json(200, {
             'status': 'uploaded',
             'version': version,
@@ -517,6 +827,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             'total_nodes': len(nodes),
             'approved_nodes': sum(1 for n in nodes.values() if n.get('status') == 'approved'),
             'pending_nodes': sum(1 for n in nodes.values() if n.get('status') == 'pending'),
+            'active_tokens': sum(1 for t in deploy_tokens.values() if t.get('status') == 'unused'),
         })
 
     def log_message(self, format, *args):
@@ -528,12 +839,13 @@ def main():
 
     # 加载持久化数据
     load_nodes()
+    load_tokens()
     load_upgrade_info()
 
-    print(f'[INFO] VyOmni Aggregator v2.0 starting...')
-    print(f'[INFO] Listening on :{LISTEN_PORT}')
-    print(f'[INFO] Data dir: {DATA_DIR}')
-    print(f'[INFO] Loaded {len(nodes)} registered nodes')
+    print('[INFO] VyOmni Aggregator v2.1 starting...')
+    print('[INFO] Listening on :' + str(LISTEN_PORT))
+    print('[INFO] Data dir: ' + DATA_DIR)
+    print('[INFO] Loaded ' + str(len(nodes)) + ' nodes, ' + str(len(deploy_tokens)) + ' tokens')
 
     server = HTTPServer(('0.0.0.0', LISTEN_PORT), ApiHandler)
 

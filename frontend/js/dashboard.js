@@ -1,7 +1,8 @@
 /**
- * VyOmni Dashboard - Enhanced with 6 dynamic features
+ * VyOmni Dashboard - Enhanced with 6 dynamic features + Token Deploy UI
  * 1. Status change animations  2. Card click modal  3. Topology graph
  * 4. Time window selector  5. Branch map  6. Theme toggle + responsive
+ * 7. Token-based node deployment panel
  */
 
 // ==================== 配置 ====================
@@ -131,7 +132,6 @@ function showPeerDetail(peer) {
         <div class="modal-chart" id="modal-chart-peer"></div>
     `;
     openModal(`Peer: ${peer.name}`, html);
-    // 渲染模态图表
     setTimeout(() => renderModalPeerChart(peer), 100);
 }
 
@@ -161,7 +161,6 @@ function renderModalPeerChart(peer) {
     const el = document.getElementById('modal-chart-peer');
     if (!el || typeof echarts === 'undefined') return;
     modalChart = echarts.init(el, getEchartsTheme());
-    // 从隧道历史中提取该peer相关数据（简化：显示总流量趋势）
     const window = Math.min(currentTimeWindow, tunnelHistory.time.length);
     const times = tunnelHistory.time.slice(-window);
     const rx = tunnelHistory.rx.slice(-window);
@@ -447,7 +446,6 @@ function updateCharts() {
     if (!tunnelData || !chartTunnel) return;
     const now = new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // 推入历史（保留最大24h的点）
     tunnelHistory.time.push(now);
     tunnelHistory.rx.push(tunnelData.totals.rx_mbps);
     tunnelHistory.tx.push(tunnelData.totals.tx_mbps);
@@ -482,7 +480,6 @@ function updateTrendCharts() {
 
     chartTunnel.setOption({ xAxis: { data: times }, series: [{ data: rx }, { data: tx }] });
 
-    // 分支负载（取第一个分支）
     if (branchData && branchData.branches.length > 0) {
         const bid = branchData.branches[0].branch_id;
         const bh = branchHistory[bid];
@@ -572,8 +569,6 @@ function updateMap() {
     if (!chartMap || !branchData) return;
     const branches = branchData.branches;
 
-    // 使用散点图坐标模拟地理位置
-    // 如果分支数据有 lat/lng 就用，否则均匀分布
     const scatterData = branches.map((br, i) => {
         const lat = br.latitude || (25 + Math.random() * 15);
         const lng = br.longitude || (100 + Math.random() * 20);
@@ -586,7 +581,6 @@ function updateMap() {
         };
     });
 
-    // 尝试用 geo 组件（如果注册了中国地图），否则用坐标散点
     const hasGeo = echarts.getMap && echarts.getMap('china');
     if (hasGeo) {
         chartMap.setOption({
@@ -598,10 +592,7 @@ function updateMap() {
                 emphasis: { itemStyle: { areaColor: '#2a3a4a' } },
                 label: { show: false }
             },
-            tooltip: {
-                trigger: 'item',
-                formatter: (p) => `${p.name}<br/>CPU: ${p.value[2]}%`
-            },
+            tooltip: { trigger: 'item', formatter: (p) => `${p.name}<br/>CPU: ${p.value[2]}%` },
             series: [{
                 type: 'scatter',
                 coordinateSystem: 'geo',
@@ -611,31 +602,14 @@ function updateMap() {
             }]
         });
     } else {
-        // 无地图注册：使用笛卡尔坐标散点
         chartMap.setOption({
             backgroundColor: 'transparent',
-            tooltip: {
-                trigger: 'item',
-                formatter: (p) => `${p.name}<br/>CPU: ${p.value[2]}%`
-            },
-            xAxis: {
-                type: 'value', min: 95, max: 125, name: '经度',
-                axisLine: { lineStyle: { color: '#555' } },
-                splitLine: { lineStyle: { color: '#2a3a4a' } }
-            },
-            yAxis: {
-                type: 'value', min: 20, max: 45, name: '纬度',
-                axisLine: { lineStyle: { color: '#555' } },
-                splitLine: { lineStyle: { color: '#2a3a4a' } }
-            },
+            tooltip: { trigger: 'item', formatter: (p) => `${p.name}<br/>CPU: ${p.value[2]}%` },
+            xAxis: { type: 'value', min: 95, max: 125, name: '经度', axisLine: { lineStyle: { color: '#555' } }, splitLine: { lineStyle: { color: '#2a3a4a' } } },
+            yAxis: { type: 'value', min: 20, max: 45, name: '纬度', axisLine: { lineStyle: { color: '#555' } }, splitLine: { lineStyle: { color: '#2a3a4a' } } },
             series: [{
                 type: 'scatter',
-                data: scatterData.map(d => ({
-                    name: d.name,
-                    value: d.value,
-                    itemStyle: d.itemStyle,
-                    symbolSize: d.symbolSize
-                })),
+                data: scatterData.map(d => ({ name: d.name, value: d.value, itemStyle: d.itemStyle, symbolSize: d.symbolSize })),
                 label: { show: true, formatter: '{b}', position: 'right', fontSize: 11, color: 'var(--text-primary)' },
                 emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(79,195,247,0.5)' } }
             }]
@@ -665,9 +639,12 @@ function escHtml(str) {
 function escAttr(str) {
     return (str || '').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
 }
+
 // ==================== 节点管理面板 ====================
 let nodesData = null;
+let tokensData = null;
 let nodesPollTimer = null;
+let tokenCountdownTimer = null;
 
 const NODE_API = {
     list: '/api/nodes',
@@ -675,6 +652,8 @@ const NODE_API = {
     reject: (id) => `/api/nodes/${id}/reject`,
     delete: (id) => `/api/nodes/${id}`,
     config: (id) => `/api/nodes/${id}/config`,
+    tokens: '/api/tokens',
+    generateToken: '/api/tokens/generate',
 };
 
 // 初始化节点管理（在 DOMContentLoaded 中追加调用）
@@ -685,7 +664,6 @@ function initNodeManagement() {
             showNodePanel();
         });
     }
-    // 如果存在节点面板容器，注入初始 HTML
     const container = document.getElementById('node-panel');
     if (container) {
         container.innerHTML = getNodePanelHtml();
@@ -699,6 +677,7 @@ function getNodePanelHtml() {
         <div class="node-panel-header">
             <h2><i class="fas fa-server"></i> 节点管理</h2>
             <div class="node-panel-actions">
+                <button class="btn btn-sm btn-primary" id="btn-add-node"><i class="fas fa-plus"></i> 新增节点</button>
                 <button class="btn btn-sm" id="btn-refresh-nodes"><i class="fas fa-sync-alt"></i> 刷新</button>
                 <select id="node-filter-status" class="node-filter-select">
                     <option value="all">全部状态</option>
@@ -714,6 +693,13 @@ function getNodePanelHtml() {
             </div>
         </div>
         <div class="node-stats-bar" id="node-stats-bar"></div>
+
+        <!-- Token 列表 -->
+        <div class="token-section" id="token-section">
+            <h3><i class="fas fa-key"></i> 部署 Token</h3>
+            <div class="token-list" id="token-list"></div>
+        </div>
+
         <div class="node-table-wrap">
             <table class="node-table" id="node-table">
                 <thead>
@@ -738,7 +724,10 @@ function getNodePanelHtml() {
 
 function bindNodePanelEvents() {
     const refreshBtn = document.getElementById('btn-refresh-nodes');
-    if (refreshBtn) refreshBtn.addEventListener('click', fetchNodes);
+    if (refreshBtn) refreshBtn.addEventListener('click', () => { fetchNodes(); fetchTokens(); });
+
+    const addBtn = document.getElementById('btn-add-node');
+    if (addBtn) addBtn.addEventListener('click', showAddNodeModal);
 
     const filterStatus = document.getElementById('node-filter-status');
     if (filterStatus) filterStatus.addEventListener('change', renderNodeTable);
@@ -757,14 +746,261 @@ function showNodePanel() {
                 bindNodePanelEvents();
             }
             fetchNodes();
-            // 开始轮询
+            fetchTokens();
             if (!nodesPollTimer) {
-                nodesPollTimer = setInterval(fetchNodes, 10000);
+                nodesPollTimer = setInterval(() => { fetchNodes(); fetchTokens(); }, 10000);
             }
         } else {
             if (nodesPollTimer) { clearInterval(nodesPollTimer); nodesPollTimer = null; }
+            if (tokenCountdownTimer) { clearInterval(tokenCountdownTimer); tokenCountdownTimer = null; }
         }
     }
+}
+
+// ==================== 新增节点弹窗（Token 生成） ====================
+function showAddNodeModal() {
+    const html = `
+    <div class="add-node-form">
+        <h4><i class="fas fa-plus-circle"></i> 新增节点 — 生成部署 Token</h4>
+        <p style="color:var(--text-secondary);margin-bottom:16px;">
+            生成一次性 Token 后，在目标节点执行部署命令即可自动注册。
+        </p>
+        <div class="form-group">
+            <label>节点名称 <span style="color:#ef5350;">*</span></label>
+            <input type="text" id="add-node-name" placeholder="例：上海分部、深圳机房" />
+        </div>
+        <div class="form-group">
+            <label>角色</label>
+            <select id="add-node-role">
+                <option value="branch">分支 (Branch)</option>
+                <option value="hq">总部 (HQ)</option>
+            </select>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-primary" id="btn-generate-token">
+                <i class="fas fa-key"></i> 生成 Token
+            </button>
+            <button class="btn" onclick="closeModal()">取消</button>
+        </div>
+        <div id="token-result" style="display:none;margin-top:20px;"></div>
+    </div>`;
+
+    openModal('新增节点', html);
+
+    document.getElementById('btn-generate-token').addEventListener('click', async () => {
+        const name = document.getElementById('add-node-name').value.trim();
+        const role = document.getElementById('add-node-role').value;
+
+        if (!name) {
+            alert('请输入节点名称');
+            return;
+        }
+
+        const btn = document.getElementById('btn-generate-token');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...';
+
+        try {
+            const resp = await fetch(NODE_API.generateToken, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, role }),
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json();
+                alert('生成失败: ' + (err.error || '未知错误'));
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-key"></i> 生成 Token';
+                return;
+            }
+
+            const data = await resp.json();
+            showTokenResult(data);
+            fetchTokens();
+        } catch (e) {
+            alert('请求失败: ' + e.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-key"></i> 生成 Token';
+        }
+    });
+}
+
+function showTokenResult(data) {
+    const resultEl = document.getElementById('token-result');
+    if (!resultEl) return;
+
+    const expiresIn = data.expires_at - Math.floor(Date.now() / 1000);
+    const expiresHours = Math.floor(expiresIn / 3600);
+    const expiresMinutes = Math.floor((expiresIn % 3600) / 60);
+
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `
+    <div class="token-result-card">
+        <div class="token-result-header">
+            <i class="fas fa-check-circle" style="color:#66bb6a;font-size:1.5em;"></i>
+            <span>Token 生成成功！</span>
+        </div>
+
+        <div class="token-result-section">
+            <label>一键部署命令</label>
+            <div class="copy-box">
+                <code id="deploy-cmd-text">${escHtml(data.deploy_cmd)}</code>
+                <button class="btn btn-xs btn-copy" onclick="copyToClipboard('deploy-cmd-text')">
+                    <i class="fas fa-copy"></i> 复制
+                </button>
+            </div>
+            <p class="hint">在目标节点以 root 执行此命令，将自动完成部署</p>
+        </div>
+
+        <div class="token-result-section">
+            <label>手动配置 (config.conf)</label>
+            <div class="copy-box">
+                <pre id="config-text">${escHtml(data.config_content)}</pre>
+                <button class="btn btn-xs btn-copy" onclick="copyToClipboard('config-text')">
+                    <i class="fas fa-copy"></i> 复制
+                </button>
+            </div>
+        </div>
+
+        <div class="token-result-section">
+            <label>Token 信息</label>
+            <div class="token-meta">
+                <span><i class="fas fa-key"></i> ${data.token}</span>
+                <span><i class="fas fa-user-tag"></i> ${data.role}</span>
+                <span class="token-countdown" id="token-countdown">
+                    <i class="fas fa-clock"></i> 有效期: ${expiresHours}h ${expiresMinutes}m
+                </span>
+            </div>
+        </div>
+    </div>`;
+
+    // 启动倒计时
+    startTokenCountdown(data.expires_at);
+}
+
+function startTokenCountdown(expiresAt) {
+    if (tokenCountdownTimer) clearInterval(tokenCountdownTimer);
+    const el = document.getElementById('token-countdown');
+    if (!el) return;
+
+    tokenCountdownTimer = setInterval(() => {
+        const remaining = expiresAt - Math.floor(Date.now() / 1000);
+        if (remaining <= 0) {
+            el.innerHTML = '<i class="fas fa-times-circle" style="color:#ef5350;"></i> 已过期';
+            clearInterval(tokenCountdownTimer);
+            return;
+        }
+        const h = Math.floor(remaining / 3600);
+        const m = Math.floor((remaining % 3600) / 60);
+        const s = remaining % 60;
+        el.innerHTML = `<i class="fas fa-clock"></i> 剩余: ${h}h ${m}m ${s}s`;
+    }, 1000);
+}
+
+function copyToClipboard(elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const text = el.textContent || el.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+        // 显示临时提示
+        const btn = el.parentElement.querySelector('.btn-copy');
+        if (btn) {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i> 已复制';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 2000);
+        }
+    }).catch(() => {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+}
+
+// ==================== Token 列表 ====================
+async function fetchTokens() {
+    const data = await fetchJSON(NODE_API.tokens);
+    if (data && data.tokens) {
+        tokensData = data.tokens;
+        renderTokenList();
+    }
+}
+
+function renderTokenList() {
+    const el = document.getElementById('token-list');
+    if (!el || !tokensData) return;
+
+    if (tokensData.length === 0) {
+        el.innerHTML = '<p class="no-tokens">暂无 Token，点击"新增节点"生成</p>';
+        return;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    // 按时间倒序
+    const sorted = [...tokensData].sort((a, b) => b.created_at - a.created_at);
+
+    el.innerHTML = `
+    <table class="token-table">
+        <thead>
+            <tr>
+                <th>Token</th>
+                <th>名称</th>
+                <th>角色</th>
+                <th>状态</th>
+                <th>创建时间</th>
+                <th>有效期</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${sorted.map(tk => {
+                let statusBadge = '';
+                if (tk.status === 'unused') {
+                    const remaining = tk.expires_at - now;
+                    if (remaining <= 0) {
+                        statusBadge = '<span class="status-badge expired"><i class="fas fa-times-circle"></i> 已过期</span>';
+                    } else {
+                        statusBadge = '<span class="status-badge pending"><i class="fas fa-clock"></i> 待使用</span>';
+                    }
+                } else if (tk.status === 'used') {
+                    statusBadge = '<span class="status-badge approved"><i class="fas fa-check-circle"></i> 已使用</span>';
+                } else {
+                    statusBadge = '<span class="status-badge expired"><i class="fas fa-times-circle"></i> 已过期</span>';
+                }
+
+                const roleBadge = tk.role === 'hq'
+                    ? '<span class="role-badge hq">HQ</span>'
+                    : '<span class="role-badge branch">Branch</span>';
+
+                const remaining = tk.expires_at - now;
+                let expiryText = '';
+                if (tk.status === 'used') {
+                    expiryText = '已消费';
+                } else if (remaining <= 0) {
+                    expiryText = '已过期';
+                } else {
+                    const h = Math.floor(remaining / 3600);
+                    const m = Math.floor((remaining % 3600) / 60);
+                    expiryText = `${h}h ${m}m`;
+                }
+
+                return `
+                <tr>
+                    <td><code>${tk.token}</code></td>
+                    <td>${escHtml(tk.name)}</td>
+                    <td>${roleBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td>${formatDateTime(tk.created_at)}</td>
+                    <td>${expiryText}</td>
+                </tr>`;
+            }).join('')}
+        </tbody>
+    </table>`;
 }
 
 async function fetchNodes() {
@@ -951,8 +1187,6 @@ function formatDateTime(unixTs) {
 
 // 在 DOMContentLoaded 时追加初始化
 (function() {
-    const origInit = window.onload;
-    // 延迟初始化，确保 DOM 就绪
     setTimeout(() => {
         initNodeManagement();
     }, 100);
