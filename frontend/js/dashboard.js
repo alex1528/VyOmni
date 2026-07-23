@@ -274,7 +274,7 @@ function renderPeerGrid() {
                 <div class="metric"><span class="label">↓ 下行</span><span class="value">${peer.rx_rate_mbps} Mbps</span></div>
                 <div class="metric"><span class="label">↑ 上行</span><span class="value">${peer.tx_rate_mbps} Mbps</span></div>
                 <div class="metric"><span class="label">Endpoint</span><span class="value">${peer.endpoint || '-'}</span></div>
-                <div class="metric"><span class="label">Branch</span><span class="value">${peer.branch_id || '-'}</span></div>
+                <div class="metric metric-full"><span class="label">Allowed IPs</span><span class="value allowed-ips-list">${peer.allowed_ips ? peer.allowed_ips.split(',').map(function(s){return s.trim()}).join('<br/>') : '-'}</span></div>
             </div>
         </div>`;
     }).join('');
@@ -333,6 +333,7 @@ function renderBranchGrid() {
                 <div class="metric"><span class="label">负载 1/5/15</span><span class="value">${(br.load_1m != null ? br.load_1m : '-')} / ${(br.load_5m != null ? br.load_5m : '-')} / ${(br.load_15m != null ? br.load_15m : '-')}</span></div>
                 <div class="metric"><span class="label">上报时间</span><span class="value">${formatTime(br.reported_at)}</span></div>
                 ${ifaceHtml}
+                ${br.allowed_ips ? '<div class="metric metric-full"><span class="label">Allowed IPs</span><span class="value allowed-ips-list">' + br.allowed_ips.split(",").map(function(s){return s.trim()}).join("<br/>") + '</span></div>' : ''}
             </div>
         </div>`;
     }).join('');

@@ -1224,3 +1224,15 @@ body {
     opacity: 1 !important;
     color: var(--accent-blue);
 }
+
+/* === Allowed IPs 独占整行 + 竖排 === */
+.metric-full {
+    grid-column: 1 / -1;
+}
+
+.allowed-ips-list {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82em;
+    line-height: 1.7;
+    white-space: normal;
+}

@@ -417,6 +417,8 @@ def write_status_files():
             'system': sys_data,
             # IP 地理位置
             'geo': node_info.get('geo', None),
+            # 从 HQ peers 关联的 allowed_ips
+            'allowed_ips': peer_allowed_map.get(node_info.get('ip', ''), '') if node_info else '',
         })
 
     branch_data = {
