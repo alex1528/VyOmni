@@ -36,6 +36,7 @@ state_lock = Lock()
 nodes = {}  # node_id -> node_info
 hq_state = {}  # 最近一次总部上报
 prev_peer_transfer = {}  # {peer_key: {'rx': bytes, 'tx': bytes, 'time': ts}}
+prev_branch_interfaces = {}  # {branch_id: {iface: {'rx': bytes, 'tx': bytes}}}
 prev_report_time = 0
 branch_states = {}  # branch_id -> 最近一次分支上报
 upgrade_info = None  # 当前可用升级信息
@@ -250,19 +251,70 @@ def write_status_files():
         json.dump(tunnel_data, f, indent=2)
 
     # status-branches.json — 仅包含 approved 节点
+    global prev_branch_interfaces
+
     branches = []
     for bid, bstate in branch_states.items():
         node_id = bstate.get('node_id', bid)
-        node_info = nodes.get(node_id, {})
+        node_info = nodes.get(node_id, {}) if nodes else {}
         if node_info.get('status') != 'approved':
             continue
+
+        sys_data = bstate.get('system', {})
+        report_ts = bstate.get('timestamp', 0)
+        raw_ifaces = bstate.get('interfaces', {})
+
+        # 接口速率差值计算
+        enriched_ifaces = {}
+        prev_ifaces = prev_branch_interfaces.get(bid, {})
+        dt_branch = (now - report_ts) if report_ts > 0 else 5  # 近似上报间隔
+
+        for iface, idata in raw_ifaces.items():
+            rx_bytes = idata.get('rx_bytes', 0)
+            tx_bytes = idata.get('tx_bytes', 0)
+            rx_rate = 0.0
+            tx_rate = 0.0
+
+            if iface in prev_ifaces:
+                prev = prev_ifaces[iface]
+                # 使用上报间隔作为时间差（branch 固定间隔上报）
+                dt = max(dt_branch, 1)
+                delta_rx = rx_bytes - prev.get('rx', 0)
+                delta_tx = tx_bytes - prev.get('tx', 0)
+                if delta_rx >= 0 and delta_tx >= 0 and dt > 0:
+                    rx_rate = round(delta_rx * 8 / dt / 1_000_000, 3)
+                    tx_rate = round(delta_tx * 8 / dt / 1_000_000, 3)
+
+            enriched_ifaces[iface] = {
+                'rx_mbps': rx_rate,
+                'tx_mbps': tx_rate,
+                'rx_bytes': rx_bytes,
+                'tx_bytes': tx_bytes,
+            }
+
+        # 更新历史
+        prev_branch_interfaces[bid] = {
+            iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
+            for iface, idata in raw_ifaces.items()
+        }
+
         branches.append({
             'branch_id': bid,
             'hostname': bstate.get('hostname', bid),
-            'last_seen': bstate.get('timestamp', 0),
-            'online': now - bstate.get('timestamp', 0) < 60,
-            'system': bstate.get('system', {}),
-            'interfaces': bstate.get('interfaces', {}),
+            'reported_at': report_ts,
+            'last_seen': report_ts,
+            'online': now - report_ts < 60,
+            'stale': now - report_ts > 30,
+            # 平铺 system 字段（前端直接读 br.cpu_percent 等）
+            'cpu_percent': sys_data.get('cpu_percent', 0),
+            'memory_percent': sys_data.get('memory_percent', 0),
+            'load_1m': sys_data.get('load_1m', 0),
+            'load_5m': sys_data.get('load_5m', 0),
+            'load_15m': sys_data.get('load_15m', 0),
+            # 接口速率（含 rx_mbps/tx_mbps）
+            'interfaces': enriched_ifaces,
+            # 保留完整 system 以备前端其他用途
+            'system': sys_data,
         })
 
     branch_data = {

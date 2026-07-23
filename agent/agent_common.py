@@ -370,19 +370,32 @@ def check_and_upgrade(config, credentials, response):
 
 # === 系统采集（公共） ===
 def collect_system():
-    """采集系统资源（CPU/内存/负载）"""
+    """采集系统资源（CPU/内存/负载）— CPU 使用差值法计算瞬时值"""
+    global _prev_cpu_idle, _prev_cpu_total
+
     cpu_percent = 0.0
     mem_percent = 0.0
     load_1m = 0.0
+    load_5m = 0.0
+    load_15m = 0.0
 
-    # CPU: /proc/stat
+    # CPU: /proc/stat 差值法
     try:
         with open('/proc/stat') as f:
             line = f.readline()
         fields = line.split()
         idle = int(fields[4])
         total = sum(int(x) for x in fields[1:])
-        cpu_percent = round((1 - idle / total) * 100, 1) if total > 0 else 0
+
+        if _prev_cpu_total > 0:
+            d_idle = idle - _prev_cpu_idle
+            d_total = total - _prev_cpu_total
+            if d_total > 0:
+                cpu_percent = round((1 - d_idle / d_total) * 100, 1)
+                cpu_percent = max(0.0, min(100.0, cpu_percent))
+
+        _prev_cpu_idle = idle
+        _prev_cpu_total = total
     except Exception:
         pass
 
@@ -394,9 +407,9 @@ def collect_system():
                 parts = line.split()
                 if len(parts) >= 2:
                     info[parts[0].rstrip(':')] = int(parts[1])
-        total = info.get('MemTotal', 1)
+        total_mem = info.get('MemTotal', 1)
         avail = info.get('MemAvailable', 0)
-        mem_percent = round((1 - avail / total) * 100, 1)
+        mem_percent = round((1 - avail / total_mem) * 100, 1)
     except Exception:
         pass
 
@@ -405,6 +418,8 @@ def collect_system():
         with open('/proc/loadavg') as f:
             parts = f.read().split()
             load_1m = float(parts[0])
+            load_5m = float(parts[1])
+            load_15m = float(parts[2])
     except Exception:
         pass
 
@@ -412,4 +427,8 @@ def collect_system():
         'cpu_percent': cpu_percent,
         'memory_percent': mem_percent,
         'load_1m': load_1m,
+        'load_5m': load_5m,
+        'load_15m': load_15m,
     }
+
+
