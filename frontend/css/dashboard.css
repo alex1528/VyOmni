@@ -1286,7 +1286,7 @@ body {
 }
 
 /* === 总部资源卡片 === */
-.hq-resource-card .hq-card {
+.hq-card {
     border-left: 3px solid var(--accent-blue, #4fc3f7);
 }
 
