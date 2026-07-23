@@ -24,7 +24,7 @@ LISTEN_PORT = int(os.environ.get('LISTEN_PORT', '9100'))
 REGISTER_TOKEN = os.environ.get('REGISTER_TOKEN', 'vyomni-2025')
 TIME_WINDOW = 120  # 签名有效窗口（秒）
 DEFAULT_REPORT_INTERVAL = 10
-AGENT_FILES_DIR = os.environ.get('AGENT_FILES_DIR', '/opt/vyomni-server/agent')
+AGENT_FILES_DIR = os.environ.get('AGENT_FILES_DIR', '/app/agent')
 
 # === 数据文件路径 ===
 NODES_FILE = os.path.join(DATA_DIR, 'nodes.json')
@@ -546,13 +546,13 @@ class ApiHandler(BaseHTTPRequestHandler):
             config = {}
 
         # 合并节点信息的 geo_locations
-        nodes = self.server.nodes if hasattr(self.server, 'nodes') else load_nodes()
+        load_nodes()  # 刷新全局 nodes
         geo = config.get('geo_locations', {})
 
         result = {
             'geo_locations': geo,
             'node_defaults': config.get('node_defaults', {}),
-            'nodes_count': len(nodes),
+            'nodes_count': len(nodes) if nodes else 0,
         }
         self.send_json(200, result)
 

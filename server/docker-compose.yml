@@ -1,8 +1,8 @@
 services:
   aggregator:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: server/Dockerfile
     container_name: vyomni-aggregator
     command: python3 -u aggregator.py
     # 不对外暴露，仅通过 nginx 代理访问
@@ -22,8 +22,8 @@ services:
 
   alerter:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: server/Dockerfile
     container_name: vyomni-alerter
     command: python3 -u alerter.py
     volumes:
@@ -42,7 +42,7 @@ services:
     image: nginx:alpine
     container_name: vyomni-nginx
     ports:
-      - "8080:80"
+      - "80:80"
     volumes:
       - ../frontend/index.html:/var/www/monitor/index.html:ro
       - ../frontend/css:/var/www/monitor/css:ro
