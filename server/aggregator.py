@@ -415,7 +415,7 @@ def write_status_files():
         'interfaces': hq_enriched_ifaces,
     }
 
-with open(os.path.join(DATA_DIR, 'status-tunnel.json'), 'w') as f:
+    with open(os.path.join(DATA_DIR, 'status-tunnel.json'), 'w') as f:
         json.dump(tunnel_data, f, indent=2)
 
     # status-branches.json — 仅包含 approved 节点
