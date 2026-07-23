@@ -454,6 +454,7 @@ def generate_deploy_script(token_str, token_info, server_url):
         'Type=simple',
         'WorkingDirectory=/opt/vyomni-agent',
         'ExecStart=/usr/bin/python3 /opt/vyomni-agent/' + agent_script,
+        'MemoryMax=20M',
         'Restart=always',
         'RestartSec=10',
         'StandardOutput=journal',

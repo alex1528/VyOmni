@@ -64,6 +64,7 @@ After=network.target
 Type=simple
 ExecStart=/usr/bin/python3 $INSTALL_DIR/$SCRIPT
 WorkingDirectory=$INSTALL_DIR
+MemoryMax=20M
 Restart=always
 RestartSec=10
 StandardOutput=journal
