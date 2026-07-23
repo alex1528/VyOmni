@@ -489,8 +489,19 @@ def write_status_files():
             }
             prev_branch_report_time[bid] = report_ts
             prev_branch_rates[bid] = enriched_ifaces
+        elif prev_ts == 0 and report_ts > 0:
+            # 首次遇到该分支 — 初始化基线（不计算速率）
+            prev_branch_interfaces[bid] = {
+                iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
+                for iface, idata in raw_ifaces.items()
+            }
+            prev_branch_report_time[bid] = report_ts
+            enriched_ifaces = prev_branch_rates.get(bid, {
+                iface: {'rx_mbps': 0, 'tx_mbps': 0, 'rx_bytes': idata.get('rx_bytes', 0), 'tx_bytes': idata.get('tx_bytes', 0)}
+                for iface, idata in raw_ifaces.items()
+            })
         else:
-            # 无新数据，使用上次缓存的速率结果
+            # report_ts 未变化（HQ触发），使用上次缓存的速率
             enriched_ifaces = prev_branch_rates.get(bid, {
                 iface: {'rx_mbps': 0, 'tx_mbps': 0, 'rx_bytes': idata.get('rx_bytes', 0), 'tx_bytes': idata.get('tx_bytes', 0)}
                 for iface, idata in raw_ifaces.items()
