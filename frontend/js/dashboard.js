@@ -143,7 +143,7 @@ function showBranchDetail(br) {
 
     const html = `
         <div class="detail-grid">
-            <div class="detail-item"><span class="label">分支 ID</span><span class="value">${escHtml(br.display_name || br.hostname || br.branch_id)}</span></div>
+            <div class="detail-item"><span class="label">分支 ID</span><span class="value">${escHtml(br.display_name || br.hostname || br.branch_id)} <i class="fas fa-pen branch-rename-btn" data-node-id="${escAttr(br.branch_id)}" data-current-name="${escAttr(br.display_name || br.hostname || br.branch_id)}" title="设置别名" style="font-size:0.7em;opacity:0.5;cursor:pointer"></i></span></div>
             <div class="detail-item"><span class="label">状态</span><span class="value">${br.stale ? '🟡 中断' : '🟢 正常'}</span></div>
             <div class="detail-item"><span class="label">CPU</span><span class="value">${br.cpu_percent?.toFixed(1) || '-'}%</span></div>
             <div class="detail-item"><span class="label">内存</span><span class="value">${br.memory_percent?.toFixed(1) || '-'}%</span></div>
@@ -324,7 +324,7 @@ function renderBranchGrid() {
         return `
         <div class="branch-card ${statusClass}" data-branch='${escAttr(JSON.stringify(br))}'>
             <div class="card-header">
-                <span class="name"><i class="fas fa-building"></i> ${escHtml(br.display_name || br.hostname || br.branch_id)}</span>
+                <span class="name"><i class="fas fa-building"></i> ${escHtml(br.display_name || br.hostname || br.branch_id)} <i class="fas fa-pen branch-rename-btn" data-node-id="${escAttr(br.branch_id)}" data-current-name="${escAttr(br.display_name || br.hostname || br.branch_id)}" title="设置别名" style="font-size:0.7em;opacity:0.5;cursor:pointer"></i></span>
                 <span class="status ${statusClass}">${statusLabel}</span>
             </div>
             <div class="card-metrics">
@@ -337,6 +337,16 @@ function renderBranchGrid() {
             </div>
         </div>`;
     }).join('');
+
+    // 绑定分支别名编辑按钮
+    grid.querySelectorAll('.branch-rename-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nodeId = btn.dataset.nodeId;
+            const currentName = btn.dataset.currentName;
+            renameBranchNode(nodeId, currentName);
+        });
+    });
 
     grid.querySelectorAll('.branch-card').forEach(card => {
         card.addEventListener('click', () => {
@@ -1434,6 +1444,26 @@ async function setPeerAlias(peerKey, currentName) {
         });
         if (resp.ok) {
             // 延迟 500ms 后刷新（等 aggregator 写入完成）
+            setTimeout(() => poll(), 500);
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            alert('设置失败: ' + (err.error || 'HTTP ' + resp.status));
+        }
+    } catch(e) {
+        alert('请求失败: ' + e.message);
+    }
+}
+
+async function renameBranchNode(nodeId, currentName) {
+    const newName = prompt('设置分支节点显示别名:', currentName);
+    if (newName === null || newName.trim() === '') return;
+    try {
+        const resp = await fetch('/api/nodes/' + nodeId + '/rename', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({display_name: newName.trim()}),
+        });
+        if (resp.ok) {
             setTimeout(() => poll(), 500);
         } else {
             const err = await resp.json().catch(() => ({}));

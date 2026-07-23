@@ -260,16 +260,10 @@ def _get_branch_allowed_ips(bstate, peer_endpoint_map, node_info):
 
 def _resolve_branch_display_name(node_info, peer_endpoint_map):
     """
-    查找分支节点的显示别名
-    逻辑：branch上报IP → 在 peer_endpoint_map 中找匹配 → 拿到对应 peer_key → 查 peer_aliases
+    获取分支节点的显示别名（独立于隧道 peer_aliases）
+    分支卡片别名 = node 自身的 display_name（通过 /api/nodes/{id}/rename 设置）
+    与隧道卡片的 peer_aliases 完全独立，互不干扰
     """
-    node_ip = node_info.get('ip', '')
-    if node_ip and node_ip in peer_endpoint_map:
-        # 找到该 branch IP 对应的 peer 信息
-        matched_peer_key = peer_endpoint_map[node_ip].get('peer_key', '')
-        if matched_peer_key and matched_peer_key in peer_aliases:
-            return peer_aliases[matched_peer_key]
-    # fallback: node 自身的 display_name
     return node_info.get('display_name', '')
 
 
