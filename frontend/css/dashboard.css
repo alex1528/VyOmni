@@ -151,7 +151,7 @@ body {
 /* ===== Peer / Branch 卡片网格 ===== */
 .peer-grid, .branch-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
     gap: 16px;
 }
 
@@ -1174,4 +1174,37 @@ body {
     min-width: 140px;
     white-space: nowrap;
     overflow: visible;
+}
+
+/* === 隧道卡片指标优化 === */
+.peer-card .card-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.peer-card .card-metrics .metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border-color);
+    min-width: 0;
+}
+
+.peer-card .card-metrics .metric .value {
+    font-size: 0.82em;
+    text-align: right;
+    word-break: break-all;
+    max-width: 60%;
+}
+
+/* Endpoint 行独占两列 */
+.peer-card .card-metrics .metric:nth-child(5) {
+    grid-column: 1 / -1;
+}
+
+/* Branch 行也独占两列 */
+.peer-card .card-metrics .metric:nth-child(6) {
+    grid-column: 1 / -1;
 }

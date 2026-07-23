@@ -601,28 +601,32 @@ function updateMap() {
         'suzhou': [120.62, 31.30], 'wuxi': [120.31, 31.49], 'hefei': [117.28, 31.82],
     };
 
-    // 根据名称自动匹配坐标
+    // 根据 IP 地理定位结果获取坐标（服务端自动查询并缓存）
     function resolveCoords(br) {
+        // 优先：服务端 IP 地理定位结果
+        if (br.geo && br.geo.lat && br.geo.lng) {
+            return { coords: [br.geo.lng, br.geo.lat], label: br.geo.city || br.branch_id };
+        }
+
+        // 次选：configData.geo_locations 手动配置
         const geoMap = (configData && configData.geo_locations) || {};
         const bid = (br.branch_id || br.hostname || '').toLowerCase();
         const hostname = (br.hostname || '').toLowerCase();
-
-        // 优先从 configData.geo_locations 匹配
         for (const [key, val] of Object.entries(geoMap)) {
             if (bid.includes(key.toLowerCase()) || hostname.includes(key.toLowerCase())) {
                 return { coords: [val.lng, val.lat], label: val.label || key };
             }
         }
 
-        // 从内置城市表模糊匹配
+        // 次选：内置城市表模糊匹配
         for (const [city, coords] of Object.entries(CITY_COORDS)) {
             if (bid.includes(city) || hostname.includes(city)) {
                 return { coords, label: city };
             }
         }
 
-        // 未匹配：随机散布在中国中部区域
-        return { coords: [108 + Math.random() * 10, 28 + Math.random() * 8], label: br.branch_id || 'unknown' };
+        // 最终 fallback：固定默认位置（北京），绝不随机！
+        return { coords: [116.40, 39.90], label: br.hostname || br.branch_id || '未定位' };
     }
 
     const branches = branchData.branches || [];

@@ -6,6 +6,7 @@ VyOmni Aggregator — 集中式数据聚合器（v2.1）
 """
 
 import json
+import urllib.request
 import time
 import hashlib
 import hmac
@@ -25,6 +26,30 @@ REGISTER_TOKEN = os.environ.get('REGISTER_TOKEN', 'vyomni-2025')
 TIME_WINDOW = 120  # 签名有效窗口（秒）
 DEFAULT_REPORT_INTERVAL = 10
 AGENT_FILES_DIR = os.environ.get('AGENT_FILES_DIR', '/app/agent')
+
+
+
+# === IP 地理定位 ===
+def query_ip_geolocation(ip):
+    """通过 ip-api.com 查询 IP 地理位置（免费，无需key）"""
+    if not ip or ip in ('0.0.0.0', '127.0.0.1', ''):
+        return None
+    try:
+        url = f'http://ip-api.com/json/{ip}?fields=status,lat,lon,city,regionName,country'
+        req = urllib.request.Request(url, headers={'User-Agent': 'VyOmni/1.0'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        if data.get('status') == 'success':
+            return {
+                'lat': data.get('lat', 0),
+                'lng': data.get('lon', 0),
+                'city': data.get('city', ''),
+                'region': data.get('regionName', ''),
+                'country': data.get('country', ''),
+            }
+    except Exception as e:
+        print(f'[GEO] IP定位查询失败 {ip}: {e}')
+    return None
 
 # === 数据文件路径 ===
 NODES_FILE = os.path.join(DATA_DIR, 'nodes.json')
@@ -345,6 +370,8 @@ def write_status_files():
             'interfaces': enriched_ifaces,
             # 保留完整 system 以备前端其他用途
             'system': sys_data,
+            # IP 地理位置
+            'geo': node_info.get('geo', None),
         })
 
     branch_data = {
@@ -873,7 +900,16 @@ class ApiHandler(BaseHTTPRequestHandler):
             if payload.get('version'):
                 node_info['version'] = payload['version']
             if payload.get('ip'):
-                node_info['ip'] = payload['ip']
+                new_ip = payload['ip']
+                old_ip = node_info.get('ip', '')
+                node_info['ip'] = new_ip
+                # IP 变化时查询地理位置（缓存：同 IP 不重复查）
+                if new_ip and new_ip != node_info.get('geo_ip', ''):
+                    geo = query_ip_geolocation(new_ip)
+                    if geo:
+                        node_info['geo'] = geo
+                        node_info['geo_ip'] = new_ip
+                        print(f'[GEO] {node_info.get("hostname","")}: {new_ip} -> {geo.get("city","")},{geo.get("region","")}'  )
 
             if role == 'hq':
                 hq_state.update(payload)
