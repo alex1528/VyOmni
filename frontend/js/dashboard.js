@@ -577,15 +577,34 @@ function updateMap() {
     if (!chartMap || !branchData) return;
     const branches = branchData.branches;
 
+    // 从 configData.geo_locations 获取经纬度（按 branch_id 或 hostname 匹配）
+    const geoMap = (configData && configData.geo_locations) || {};
+
     const scatterData = branches.map((br, i) => {
-        const lat = br.latitude || (25 + Math.random() * 15);
-        const lng = br.longitude || (100 + Math.random() * 20);
-        const isStale = br.stale || (Math.floor(Date.now() / 1000) - br.reported_at > BRANCH_STALE_SEC);
+        // 尝试匹配 geo_locations：先用 branch_id，再用 hostname 的前缀
+        const bid = br.branch_id || br.hostname || '';
+        let geo = null;
+        for (const [key, val] of Object.entries(geoMap)) {
+            if (bid.toLowerCase().includes(key.toLowerCase()) ||
+                (br.hostname && br.hostname.toLowerCase().includes(key.toLowerCase()))) {
+                geo = val;
+                break;
+            }
+        }
+        const lat = geo ? geo.lat : (25 + i * 3);
+        const lng = geo ? geo.lng : (105 + i * 5);
+        const label = geo ? geo.label : bid;
+
+        const now = Math.floor(Date.now() / 1000);
+        const lastSeen = br.last_seen || br.reported_at || 0;
+        const isStale = br.stale || (now - lastSeen > BRANCH_STALE_SEC);
+        const cpuVal = (br.system && br.system.cpu_percent) || br.cpu_percent || 0;
+
         return {
-            name: br.branch_id,
-            value: [lng, lat, br.cpu_percent || 0],
+            name: label || bid,
+            value: [lng, lat, cpuVal],
             itemStyle: { color: isStale ? '#ffa726' : '#66bb6a' },
-            symbolSize: isStale ? 12 : 16,
+            symbolSize: isStale ? 12 : 18,
         };
     });
 

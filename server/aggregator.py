@@ -177,8 +177,9 @@ def write_status_files():
     global prev_peer_transfer, prev_report_time
 
     raw_peers = hq_state.get('peers', [])
-    report_time = hq_state.get('timestamp', now)
-    dt = report_time - prev_report_time if prev_report_time > 0 else 0
+    report_time = hq_state.get('timestamp', 0)
+    # 仅当 hq 有新数据时（timestamp 变化）才计算速率
+    dt = (report_time - prev_report_time) if (prev_report_time > 0 and report_time > prev_report_time) else 0
 
     enriched_peers = []
     active_count = 0
@@ -230,7 +231,9 @@ def write_status_files():
             'transfer_tx': transfer_tx,
         })
 
-    prev_report_time = report_time
+    # 仅当有新 hq 数据时才更新时间基准
+    if report_time > prev_report_time:
+        prev_report_time = report_time
 
     tunnel_data = {
         'updated_at': now,
@@ -578,7 +581,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 'updated_at': 0,
                 'collector_heartbeat': 0,
                 'system': {'hostname': 'waiting...', 'cpu_percent': 0, 'memory_percent': 0, 'tunnel_active': 0, 'tunnel_total': 0},
-                'totals': {'rx_mbps': round(total_rx_rate, 2), 'tx_mbps': round(total_tx_rate, 2)},
+                'totals': {'rx_mbps': 0, 'tx_mbps': 0},
                 'peers': []
             })
 
