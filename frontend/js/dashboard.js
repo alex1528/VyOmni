@@ -510,7 +510,7 @@ function updateTopology() {
     const peers = tunnelData.peers;
     const nodes = [
         {
-            name: '总部',
+            name: tunnelData.system.hostname || '总部',
             x: 300, y: 200,
             symbolSize: 50,
             itemStyle: { color: '#4fc3f7' },
@@ -530,7 +530,7 @@ function updateTopology() {
         const traffic = (peer.rx_rate_mbps || 0) + (peer.tx_rate_mbps || 0);
 
         nodes.push({
-            name: peer.name || `Peer-${i}`,
+            name: peer.display_name || peer.name || `Peer-${i}`,
             x: x, y: y,
             symbolSize: 30 + Math.min(traffic * 2, 20),
             itemStyle: { color: isOnline ? '#66bb6a' : '#ef5350' },
@@ -539,7 +539,7 @@ function updateTopology() {
 
         links.push({
             source: '总部',
-            target: peer.name || `Peer-${i}`,
+            target: peer.display_name || peer.name || `Peer-${i}`,
             lineStyle: {
                 width: 1 + Math.min(traffic, 10),
                 color: isOnline ? '#66bb6a' : '#ef5350',
@@ -554,8 +554,24 @@ function updateTopology() {
         tooltip: {
             trigger: 'item',
             formatter: (params) => {
-                if (params.dataType === 'node') return params.name;
-                if (params.dataType === 'edge') return `${params.data.source} → ${params.data.target}`;
+                if (params.dataType === 'node') {
+                    // 查找对应 peer 的详细数据
+                    const peer = tunnelData.peers.find(p => (p.display_name || p.name) === params.name);
+                    if (peer) {
+                        return '<b>' + params.name + '</b>' +
+                            '<br/>状态: ' + (peer.status === 'online' ? '🟢 在线' : '🔴 离线') +
+                            '<br/>Endpoint: ' + (peer.endpoint || '-') +
+                            '<br/>握手: ' + peer.last_handshake_seconds_ago + 's ago' +
+                            '<br/>↓下行: ' + (peer.rx_rate_mbps || 0) + ' Mbps' +
+                            '<br/>↑上行: ' + (peer.tx_rate_mbps || 0) + ' Mbps';
+                    }
+                    return '<b>' + params.name + '</b><br/>总部节点';
+                }
+                if (params.dataType === 'edge') {
+                    const lineWidth = params.data.lineStyle.width || 1;
+                    return params.data.source + ' → ' + params.data.target +
+                        '<br/>流量: ' + (lineWidth - 1).toFixed(2) + ' Mbps';
+                }
                 return '';
             }
         },
@@ -639,8 +655,9 @@ function updateMap() {
         const cpuVal = br.cpu_percent || (br.system && br.system.cpu_percent) || 0;
 
         return {
-            name: resolved.label,
+            name: br.display_name || resolved.label || br.branch_id,
             value: [...resolved.coords, cpuVal],
+            _branch: br,
             itemStyle: { color: isStale ? '#ffa726' : '#66bb6a' },
             symbolSize: isStale ? 14 : 20,
         };
@@ -671,7 +688,28 @@ function updateMap() {
             backgroundColor: 'transparent',
             tooltip: {
                 trigger: 'item',
-                formatter: (p) => `<b>${p.name}</b><br/>CPU: ${p.value[2]}%<br/>状态: ${p.data.itemStyle.color === '#66bb6a' ? '正常' : '中断'}`
+                formatter: (p) => {
+                    const d = p.data;
+                    const br = d._branch;
+                    if (!br) return '<b>' + p.name + '</b>';
+                    const status = d.itemStyle.color === '#66bb6a' ? '🟢 正常' : '🟠 中断';
+                    let html = '<b>' + p.name + '</b>';
+                    html += '<br/>状态: ' + status;
+                    html += '<br/>CPU: ' + (br.cpu_percent || 0).toFixed(1) + '%';
+                    html += '<br/>内存: ' + (br.memory_percent || 0).toFixed(1) + '%';
+                    html += '<br/>负载: ' + (br.load_1m != null ? br.load_1m : '-');
+                    if (br.geo && br.geo.city) html += '<br/>位置: ' + br.geo.city;
+                    if (br.interfaces) {
+                        const ifaces = Object.entries(br.interfaces);
+                        if (ifaces.length > 0) {
+                            html += '<br/>---';
+                            ifaces.forEach(([name, data]) => {
+                                html += '<br/>' + name + ': ↓' + (data.rx_mbps||0).toFixed(2) + ' ↑' + (data.tx_mbps||0).toFixed(2) + ' Mbps';
+                            });
+                        }
+                    }
+                    return html;
+                }
             },
             geo: {
                 map: 'china',
