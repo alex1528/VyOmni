@@ -304,11 +304,7 @@ function renderBranchGrid() {
         const statusClass = isStale ? 'stale' : 'active';
         const statusLabel = isStale ? '上报中断' : '正常';
         const ifaceHtml = br.interfaces ? Object.entries(br.interfaces)
-            .filter(([iface, data]) => {
-                // 隐藏无流量接口
-                const rx = data.rx_mbps || 0, tx = data.tx_mbps || 0;
-                return (rx + tx) > 0 || iface === 'wg0' || iface === 'eth0';
-            })
+            .sort(([a], [b]) => a.localeCompare(b))
             .map(([iface, data]) => {
                 const rx = formatRate(data.rx_mbps);
                 const tx = formatRate(data.tx_mbps);
