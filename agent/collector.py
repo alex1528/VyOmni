@@ -36,7 +36,7 @@ def collect_wg_dump():
             if len(fields) >= 8 and fields[3] != '(none)':
                 peers.append({
                     'interface': fields[0],
-                    'public_key': fields[1][:12] + '...',
+                    'public_key': fields[1],
                     'endpoint': fields[3],
                     'allowed_ips': fields[4],
                     'latest_handshake': int(fields[5]) if fields[5] != '0' else 0,
