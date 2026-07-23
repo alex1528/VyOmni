@@ -137,14 +137,17 @@ function showPeerDetail(peer) {
 }
 
 function showBranchDetail(br) {
+    const isHq = br.branch_id === '__hq__';
+    const titleLabel = isHq ? '总部' : '分支';
     const ifaceRows = br.interfaces ? Object.entries(br.interfaces).map(([iface, data]) =>
         `<div class="detail-item"><span class="label">${iface}</span><span class="value">↓${data.rx_mbps} / ↑${data.tx_mbps} Mbps</span></div>`
     ).join('') : '';
 
     const html = `
         <div class="detail-grid">
-            <div class="detail-item"><span class="label">分支 ID</span><span class="value">${escHtml(br.display_name || br.hostname || br.branch_id)} <i class="fas fa-pen branch-rename-btn" data-node-id="${escAttr(br.branch_id)}" data-current-name="${escAttr(br.display_name || br.hostname || br.branch_id)}" title="设置别名" style="font-size:0.7em;opacity:0.5;cursor:pointer"></i></span></div>
+            <div class="detail-item"><span class="label">${titleLabel}</span><span class="value">${escHtml(br.display_name || br.hostname || br.branch_id)} ${isHq ? '' : '<i class="fas fa-pen branch-rename-btn" data-node-id="' + escAttr(br.branch_id) + '" data-current-name="' + escAttr(br.display_name || br.hostname || br.branch_id) + '" title="设置别名" style="font-size:0.7em;opacity:0.5;cursor:pointer"></i>'}</span></div>
             <div class="detail-item"><span class="label">状态</span><span class="value">${br.stale ? '🟡 中断' : '🟢 正常'}</span></div>
+            ${isHq ? '<div class="detail-item"><span class="label">隧道</span><span class="value">' + (br.tunnel_active || 0) + ' / ' + (br.tunnel_total || 0) + '</span></div>' : ''}
             <div class="detail-item"><span class="label">CPU</span><span class="value">${br.cpu_percent?.toFixed(1) || '-'}%</span></div>
             <div class="detail-item"><span class="label">内存</span><span class="value">${br.memory_percent?.toFixed(1) || '-'}%</span></div>
             <div class="detail-item"><span class="label">负载 1/5/15</span><span class="value">${(br.load_1m != null ? br.load_1m : '-')} / ${(br.load_5m != null ? br.load_5m : '-')} / ${(br.load_15m != null ? br.load_15m : '-')}</span></div>
@@ -154,7 +157,7 @@ function showBranchDetail(br) {
         <h4 style="margin:12px 0 8px;font-size:0.9em;color:var(--text-secondary);">负载曲线</h4>
         <div class="modal-chart" id="modal-chart-branch"></div>
     `;
-    openModal(`分支: ${br.branch_id}`, html);
+    openModal(`${titleLabel}: ${escHtml(br.display_name || br.hostname || br.branch_id)}`, html);
     setTimeout(() => renderModalBranchChart(br), 100);
 }
 
@@ -320,8 +323,10 @@ function renderBranchGrid() {
                     return `<div class="iface-row"><span class="iface-name">${iface}</span><span class="iface-rate">↓${rx} ↑${tx}</span></div>`;
                 }).join('');
         }
+        // 构造与分支相同结构的数据对象，用于点击弹窗
+        const hqBranchData = { branch_id: '__hq__', hostname: hq.hostname, display_name: hq.hostname, cpu_percent: hq.cpu_percent, memory_percent: hq.memory_percent, load_1m: hq.load_1m, load_5m: hq.load_5m, load_15m: hq.load_15m, interfaces: hq.interfaces, reported_at: tunnelData.updated_at, stale: false, tunnel_active: hq.tunnel_active, tunnel_total: hq.tunnel_total };
         hqCardHtml = `
-        <div class="branch-card active hq-card">
+        <div class="branch-card active hq-card" data-branch='${escAttr(JSON.stringify(hqBranchData))}'>
             <div class="card-header">
                 <span class="name"><i class="fas fa-crown"></i> ${escHtml(hq.hostname)}</span>
                 <span class="status active">总部在线</span>
@@ -330,6 +335,7 @@ function renderBranchGrid() {
                 <div class="metric"><span class="label">CPU</span><span class="value">${hq.cpu_percent?.toFixed(1) || '0'}%</span></div>
                 <div class="metric"><span class="label">内存</span><span class="value">${hq.memory_percent?.toFixed(1) || '0'}%</span></div>
                 <div class="metric"><span class="label">隧道</span><span class="value">${hq.tunnel_active || 0} / ${hq.tunnel_total || 0}</span></div>
+                <div class="metric"><span class="label">负载 1/5/15</span><span class="value">${hq.load_1m != null ? hq.load_1m : '-'} / ${hq.load_5m != null ? hq.load_5m : '-'} / ${hq.load_15m != null ? hq.load_15m : '-'}</span></div>
                 <div class="metric"><span class="label">更新</span><span class="value">${formatTime(tunnelData.updated_at)}</span></div>
                 ${hqIfaceHtml}
             </div>
@@ -517,6 +523,17 @@ function updateCharts() {
     const maxPoints = 17280;
     if (tunnelHistory.time.length > maxPoints) {
         tunnelHistory.time.shift(); tunnelHistory.rx.shift(); tunnelHistory.tx.shift();
+    }
+
+    // 总部负载历史（使用 __hq__ 作为 key，与弹窗 branch_id 一致）
+    if (tunnelData.hq_resource) {
+        const hq = tunnelData.hq_resource;
+        if (!branchHistory['__hq__']) branchHistory['__hq__'] = { time: [], cpu: [], mem: [] };
+        const bh = branchHistory['__hq__'];
+        bh.time.push(now);
+        bh.cpu.push(hq.cpu_percent || 0);
+        bh.mem.push(hq.memory_percent || 0);
+        if (bh.time.length > maxPoints) { bh.time.shift(); bh.cpu.shift(); bh.mem.shift(); }
     }
 
     if (branchData && branchData.branches.length > 0) {
