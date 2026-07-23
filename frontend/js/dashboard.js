@@ -817,6 +817,8 @@ function getNodePanelHtml() {
                     <tr>
                         <th>主机名</th>
                         <th>角色</th>
+                        <th>IP</th>
+                        <th>版本</th>
                         <th>状态</th>
                         <th>最后在线</th>
                         <th>注册时间</th>
@@ -1187,10 +1189,12 @@ function renderNodeTable() {
         const now2 = Math.floor(Date.now() / 1000);
         const isOnline = node.status === 'approved' && now2 - node.last_seen < 60;
         const statusBadge = getNodeStatusBadge(node.status);
-        const roleBadge = node.role === 'hq'
+        // role 判断用 toLowerCase 兼容大小写
+        const role = (node.role || '').toLowerCase();
+        const roleBadge = role === 'hq'
             ? '<span class="role-badge hq">HQ</span>'
             : '<span class="role-badge branch">Branch</span>';
-        const lastSeen = node.last_seen ? formatTimeAgo(now - node.last_seen) : '从未';
+        const lastSeen = node.last_seen ? formatTimeAgo(now2 - node.last_seen) : '从未';
         const regTime = node.registered_at ? formatShortDate(node.registered_at) : '-';
 
         let actions = '';
@@ -1205,6 +1209,8 @@ function renderNodeTable() {
         return '<tr>' +
             '<td class="td-hostname" title="' + escAttr(node.node_id) + '">' + escHtml(node.hostname || node.node_id) + '</td>' +
             '<td>' + roleBadge + '</td>' +
+            '<td class="td-ip">' + escHtml(node.ip || '-') + '</td>' +
+            '<td>' + escHtml(node.version || '-') + '</td>' +
             '<td>' + statusBadge + '</td>' +
             '<td>' + lastSeen + '</td>' +
             '<td class="td-date">' + regTime + '</td>' +
