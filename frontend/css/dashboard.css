@@ -585,3 +585,8 @@ body {
     font-size: 0.8em;
     color: var(--text-secondary);
 }
+
+/* 按钮点击反馈 */
+.nav-btn:active {
+    transform: scale(0.95);
+}

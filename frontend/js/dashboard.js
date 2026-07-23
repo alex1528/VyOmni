@@ -659,16 +659,17 @@ const NODE_API = {
 
 // 初始化节点管理（在 DOMContentLoaded 中追加调用）
 function initNodeManagement() {
+    console.log('[VyOmni] initNodeManagement called');
     const navBtn = document.getElementById('nav-nodes');
     if (navBtn) {
-        navBtn.addEventListener('click', () => {
+        navBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('[VyOmni] nav-nodes clicked');
             showNodePanel();
         });
-    }
-    const container = document.getElementById('node-panel');
-    if (container) {
-        container.innerHTML = getNodePanelHtml();
-        bindNodePanelEvents();
+        console.log('[VyOmni] nav-nodes event bound');
+    } else {
+        console.warn('[VyOmni] nav-nodes button not found!');
     }
 }
 
@@ -738,23 +739,41 @@ function bindNodePanelEvents() {
 }
 
 function showNodePanel() {
+    console.log('[VyOmni] showNodePanel called');
     const panel = document.getElementById('node-panel');
-    if (panel) {
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        if (panel.style.display === 'block') {
-            if (!panel.innerHTML.trim()) {
-                panel.innerHTML = getNodePanelHtml();
-                bindNodePanelEvents();
-            }
-            fetchNodes();
-            fetchTokens();
-            if (!nodesPollTimer) {
-                nodesPollTimer = setInterval(() => { fetchNodes(); fetchTokens(); }, 10000);
-            }
-        } else {
-            if (nodesPollTimer) { clearInterval(nodesPollTimer); nodesPollTimer = null; }
-            if (tokenCountdownTimer) { clearInterval(tokenCountdownTimer); tokenCountdownTimer = null; }
+    const navBtn = document.getElementById('nav-nodes');
+    if (!panel) {
+        console.error('[VyOmni] node-panel element not found!');
+        return;
+    }
+
+    const isHidden = panel.style.display === 'none' || panel.style.display === '';
+    panel.style.display = isHidden ? 'block' : 'none';
+    console.log('[VyOmni] panel display:', panel.style.display);
+
+    // 切换导航按钮 active 状态
+    if (navBtn) {
+        navBtn.classList.toggle('active', isHidden);
+    }
+
+    if (isHidden) {
+        // 展开面板
+        if (!panel.innerHTML.trim() || panel.querySelector('.node-mgmt-panel') === null) {
+            console.log('[VyOmni] Rendering node panel HTML');
+            panel.innerHTML = getNodePanelHtml();
+            bindNodePanelEvents();
         }
+        fetchNodes();
+        fetchTokens();
+        if (!nodesPollTimer) {
+            nodesPollTimer = setInterval(() => { fetchNodes(); fetchTokens(); }, 10000);
+        }
+        // 滚动到面板可见位置
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        // 收起面板
+        if (nodesPollTimer) { clearInterval(nodesPollTimer); nodesPollTimer = null; }
+        if (tokenCountdownTimer) { clearInterval(tokenCountdownTimer); tokenCountdownTimer = null; }
     }
 }
 
