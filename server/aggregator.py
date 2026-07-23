@@ -79,6 +79,7 @@ def save_peer_aliases():
         json.dump(peer_aliases, f, indent=2, ensure_ascii=False)
 
 prev_branch_interfaces = {}  # {branch_id: {iface: {'rx': bytes, 'tx': bytes}}}
+prev_branch_report_time = {}  # {branch_id: last_report_timestamp}
 prev_hq_interfaces = {}  # {iface: {'rx': bytes, 'tx': bytes}}
 prev_report_time = 0
 branch_states = {}  # branch_id -> 最近一次分支上报
@@ -422,7 +423,7 @@ def write_status_files():
         json.dump(tunnel_data, f, indent=2)
 
     # status-branches.json — 仅包含 approved 节点
-    global prev_branch_interfaces
+    global prev_branch_interfaces, prev_branch_report_time
 
     # 构建 IP→peer信息 映射（从 HQ peers 数据中提取）
     # key=endpoint_ip, value={'peer_key': 完整公钥, 'allowed_ips': 字符串}
@@ -453,7 +454,8 @@ def write_status_files():
         # 接口速率差值计算
         enriched_ifaces = {}
         prev_ifaces = prev_branch_interfaces.get(bid, {})
-        dt_branch = (now - report_ts) if report_ts > 0 else 5  # 近似上报间隔
+        prev_ts = prev_branch_report_time.get(bid, 0)
+        dt_branch = (report_ts - prev_ts) if (prev_ts > 0 and report_ts > prev_ts) else 0
 
         for iface, idata in raw_ifaces.items():
             rx_bytes = idata.get('rx_bytes', 0)
@@ -464,7 +466,7 @@ def write_status_files():
             if iface in prev_ifaces:
                 prev = prev_ifaces[iface]
                 # 使用上报间隔作为时间差（branch 固定间隔上报）
-                dt = max(dt_branch, 1)
+                dt = dt_branch
                 delta_rx = rx_bytes - prev.get('rx', 0)
                 delta_tx = tx_bytes - prev.get('tx', 0)
                 if delta_rx >= 0 and delta_tx >= 0 and dt > 0:
@@ -483,6 +485,7 @@ def write_status_files():
             iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
             for iface, idata in raw_ifaces.items()
         }
+        prev_branch_report_time[bid] = report_ts
 
         branches.append({
             'branch_id': bid,
