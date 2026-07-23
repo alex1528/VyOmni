@@ -271,10 +271,10 @@ function renderPeerGrid() {
             <div class="card-metrics">
                 <div class="metric"><span class="label">接口</span><span class="value">${peer.interface}</span></div>
                 <div class="metric"><span class="label">握手</span><span class="value">${peer.last_handshake_seconds_ago}s ago</span></div>
-                <div class="metric"><span class="label">↓ 下行</span><span class="value">${peer.rx_rate_mbps} Mbps</span></div>
-                <div class="metric"><span class="label">↑ 上行</span><span class="value">${peer.tx_rate_mbps} Mbps</span></div>
                 <div class="metric"><span class="label">Endpoint</span><span class="value">${peer.endpoint || '-'}</span></div>
                 <div class="metric metric-full"><span class="label">Allowed IPs</span><span class="value allowed-ips-list">${peer.allowed_ips ? peer.allowed_ips.split(',').map(function(s){return s.trim()}).join('<br/>') : '-'}</span></div>
+                <div class="metric"><span class="label">↓ 下行</span><span class="value">${peer.rx_rate_mbps} Mbps</span></div>
+                <div class="metric"><span class="label">↑ 上行</span><span class="value">${peer.tx_rate_mbps} Mbps</span></div>
             </div>
         </div>`;
     }).join('');
@@ -332,8 +332,9 @@ function renderBranchGrid() {
                 <div class="metric"><span class="label">内存</span><span class="value">${br.memory_percent?.toFixed(1) || '-'}%</span></div>
                 <div class="metric"><span class="label">负载 1/5/15</span><span class="value">${(br.load_1m != null ? br.load_1m : '-')} / ${(br.load_5m != null ? br.load_5m : '-')} / ${(br.load_15m != null ? br.load_15m : '-')}</span></div>
                 <div class="metric"><span class="label">上报时间</span><span class="value">${formatTime(br.reported_at)}</span></div>
-                ${ifaceHtml}
+                <div class="metric"><span class="label">Endpoint</span><span class="value">${br.endpoint || '-'}</span></div>
                 ${br.allowed_ips ? '<div class="metric metric-full"><span class="label">Allowed IPs</span><span class="value allowed-ips-list">' + br.allowed_ips.split(",").map(function(s){return s.trim()}).join("<br/>") + '</span></div>' : ''}
+                ${ifaceHtml}
             </div>
         </div>`;
     }).join('');
