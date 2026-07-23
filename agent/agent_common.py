@@ -111,7 +111,7 @@ def save_credentials(creds):
 
 
 # === 节点注册 ===
-def register_node(config, capabilities=None):
+def register_node(config, role=None, capabilities=None):
     """
     首次启动注册节点
     支持传统固定 Token 和一次性 tk_ Token
@@ -130,9 +130,9 @@ def register_node(config, capabilities=None):
     # 检测 register_token 的类型来决定角色
     register_token = config['register_token']
 
-    # 如果是一次性 Token（tk_ 前缀），角色由服务端的 Token 记录决定
-    # 本地仍做检测以作为 fallback
-    role = detect_role()
+    # 角色优先由调用方指定，fallback 到 detect_role
+    if role is None:
+        role = detect_role()
 
     if capabilities is None:
         capabilities = ['system']

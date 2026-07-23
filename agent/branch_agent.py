@@ -48,7 +48,7 @@ def main():
     # 自注册
     credentials = None
     while credentials is None:
-        credentials = register_node(config, capabilities=['system', 'interfaces'])
+        credentials = register_node(config, role='branch', capabilities=['system', 'interfaces'])
         if credentials is None:
             print('[WARN] Registration failed, retrying in 10s...', file=sys.stderr)
             time.sleep(10)
