@@ -754,15 +754,22 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     # --- 部署脚本端点 ---
     def handle_get_tunnel(self):
-        """返回隧道状态数据（从 /data/status-tunnel.json 读取）"""
+        """返回隧道状态数据（从 /data/status-tunnel.json 读取，实时应用别名）"""
         data_dir = os.environ.get('DATA_DIR', '/data')
         filepath = os.path.join(data_dir, 'status-tunnel.json')
         if os.path.exists(filepath):
             with open(filepath, 'r') as f:
                 data = json.load(f)
+            # 实时应用 peer_aliases（确保重启后首次请求也有别名）
+            load_peer_aliases()
+            if peer_aliases and 'peers' in data:
+                for p in data['peers']:
+                    peer_key = p.get('peer', '')
+                    if peer_key and peer_key in peer_aliases:
+                        p['name'] = peer_aliases[peer_key]
+                        p['display_name'] = peer_aliases[peer_key]
             self.send_json(200, data)
         else:
-            # 无数据时返回空结构
             self.send_json(200, {
                 'updated_at': 0,
                 'collector_heartbeat': 0,

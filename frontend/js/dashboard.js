@@ -1263,12 +1263,12 @@ function renderNodeTable() {
             actions += '<button class="btn btn-xs btn-reject" onclick="nodeAction(\'reject\',\'' + escAttr(node.node_id) + '\')"><i class="fas fa-times"></i></button> ';
         } else if (node.status === 'approved') {
             actions += '<button class="btn btn-xs btn-config" onclick="showNodeConfig(\'' + escAttr(node.node_id) + '\')"><i class="fas fa-cog"></i></button> ';
-            actions += '<button class="btn btn-xs" style="background:var(--accent-blue);color:#fff;border:none" onclick="renameNode(\'' + escAttr(node.node_id) + '\',\'' + escAttr(node.display_name || node.hostname || '') + '\')"><i class="fas fa-pen"></i></button> ';
+
         }
         actions += '<button class="btn btn-xs btn-delete" onclick="nodeAction(\'delete\',\'' + escAttr(node.node_id) + '\')"><i class="fas fa-trash"></i></button>';
 
         return '<tr>' +
-            '<td class="td-hostname" title="' + escAttr(node.node_id) + '">' + escHtml(node.display_name || node.hostname || node.node_id) + '</td>' +
+            '<td class="td-hostname" title="' + escAttr(node.node_id) + '">' + escHtml(node.hostname || node.node_id) + '</td>' +
             '<td>' + roleBadge + '</td>' +
             '<td class="td-ip">' + escHtml(node.ip || '-') + '</td>' +
             '<td>' + escHtml(node.version || '-') + '</td>' +
