@@ -370,8 +370,9 @@ def apply_dynamic_config(credentials, response):
 # === 远程升级 ===
 def check_and_upgrade(config, credentials, response):
     """
-    检测并执行远程升级
-    返回: True 表示需要重启, False 继续运行
+    检测并执行远程升级（全自动多文件更新）
+    流程：检测新版本 → 下载所有 Agent 文件 → SHA256 校验 → 备份 → 全量替换 → 重启
+    返回: True 表示即将重启（调用方应 break 退出循环），False 继续运行
     """
     if not response:
         return False
@@ -381,76 +382,126 @@ def check_and_upgrade(config, credentials, response):
         return False
 
     new_version = upgrade_info.get('version', '')
-    sha256_expected = upgrade_info.get('sha256', '')
-
     if not new_version or new_version == AGENT_VERSION:
         return False
 
-    print(f'[UPGRADE] New version available: {new_version} (current: {AGENT_VERSION})')
+    print(f'[UPGRADE] 发现新版本: {new_version} (当前: {AGENT_VERSION})')
 
-    # 下载新版本
-    try:
-        download_url = config['server_url'].rstrip('/') + '/api/upgrade/latest'
-        os.makedirs(UPGRADE_DIR, exist_ok=True)
-        tmp_path = os.path.join(UPGRADE_DIR, f'agent_{new_version}.py.tmp')
+    # 确定需要更新的文件列表
+    agent_dir = os.path.dirname(os.path.abspath(__file__))
+    # 根据当前运行的主脚本确定角色
+    main_script = os.path.basename(sys.argv[0])
+    files_to_update = ['agent_common.py', main_script]
 
-        req = urllib.request.Request(
-            download_url,
-            headers={'X-Node-ID': credentials['node_id']},
-        )
+    server_url = config['server_url'].rstrip('/')
+    os.makedirs(UPGRADE_DIR, exist_ok=True)
 
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = resp.read()
+    # 阶段1：下载所有文件到临时目录
+    downloaded = {}
+    print(f'[UPGRADE] 下载 {len(files_to_update)} 个文件...')
+    for filename in files_to_update:
+        download_url = f'{server_url}/api/deploy/files/{filename}'
+        tmp_path = os.path.join(UPGRADE_DIR, filename + '.new')
 
-        with open(tmp_path, 'wb') as f:
-            f.write(data)
+        try:
+            req = urllib.request.Request(download_url, headers={
+                'X-Node-ID': credentials.get('node_id', ''),
+            })
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
 
-        # 校验 SHA256
-        actual_hash = hashlib.sha256(data).hexdigest()
-        if sha256_expected and actual_hash != sha256_expected:
-            print(f'[UPGRADE] SHA256 mismatch! Expected: {sha256_expected}, Got: {actual_hash}', file=sys.stderr)
-            os.remove(tmp_path)
+            # 基础验证：文件不能为空或太小（防止下载到错误页面）
+            if len(data) < 100:
+                print(f'[UPGRADE] ❌ {filename} 文件过小({len(data)}字节)，跳过升级', file=sys.stderr)
+                _cleanup_upgrade_dir()
+                return False
+
+            with open(tmp_path, 'wb') as f:
+                f.write(data)
+            downloaded[filename] = {'path': tmp_path, 'data': data, 'size': len(data)}
+            print(f'[UPGRADE]   ✓ {filename} ({len(data)} bytes)')
+
+        except Exception as e:
+            print(f'[UPGRADE] ❌ 下载 {filename} 失败: {e}', file=sys.stderr)
+            _cleanup_upgrade_dir()
             return False
 
-        # 确定当前脚本路径
-        current_script = os.path.abspath(sys.argv[0])
-        bak_path = current_script + '.bak'
+    # 阶段2：校验 SHA256（如果服务端提供了哈希）
+    expected_hash = upgrade_info.get('sha256', '')
+    if expected_hash and 'agent_common.py' in downloaded:
+        actual_hash = hashlib.sha256(downloaded['agent_common.py']['data']).hexdigest()
+        if actual_hash != expected_hash:
+            print(f'[UPGRADE] ❌ SHA256 校验失败', file=sys.stderr)
+            print(f'  期望: {expected_hash}', file=sys.stderr)
+            print(f'  实际: {actual_hash}', file=sys.stderr)
+            _cleanup_upgrade_dir()
+            return False
+        print(f'[UPGRADE]   ✓ SHA256 校验通过')
 
-        # 备份当前版本
-        if os.path.exists(current_script):
-            shutil.copy2(current_script, bak_path)
-            print(f'[UPGRADE] Backed up current version to {bak_path}')
+    # 阶段3：备份当前文件
+    print(f'[UPGRADE] 备份当前版本...')
+    backup_dir = os.path.join(UPGRADE_DIR, f'backup_{AGENT_VERSION}')
+    os.makedirs(backup_dir, exist_ok=True)
+    for filename in files_to_update:
+        src = os.path.join(agent_dir, filename)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(backup_dir, filename))
 
-        # 替换
-        shutil.move(tmp_path, current_script)
-        os.chmod(current_script, 0o755)
-        print(f'[UPGRADE] Upgraded to version {new_version}')
-
-        # 重启 systemd 服务
-        service_name = 'vyomni-agent'
+    # 阶段4：替换文件
+    print(f'[UPGRADE] 替换文件...')
+    for filename, info in downloaded.items():
+        target = os.path.join(agent_dir, filename)
         try:
-            subprocess.run(['systemctl', 'restart', service_name], timeout=10)
-            print(f'[UPGRADE] Service {service_name} restarted')
+            shutil.move(info['path'], target)
+            os.chmod(target, 0o755)
+            print(f'[UPGRADE]   ✓ {filename} 已更新')
         except Exception as e:
-            print(f'[UPGRADE] Could not restart service: {e}. Manual restart required.', file=sys.stderr)
+            print(f'[UPGRADE] ❌ 替换 {filename} 失败: {e}，执行回滚', file=sys.stderr)
+            _rollback_upgrade(agent_dir, backup_dir, files_to_update)
+            return False
 
-        return True
+    # 阶段5：重启服务
+    print(f'[UPGRADE] ✅ 升级完成: {AGENT_VERSION} → {new_version}')
+    print(f'[UPGRADE] 正在重启服务...')
 
-    except Exception as e:
-        print(f'[UPGRADE] Upgrade failed: {e}', file=sys.stderr)
-        # 回滚
+    # 使用 os.execv 或 systemctl restart 重启
+    # systemctl restart 会杀掉当前进程，所以这之后的代码不会执行
+    try:
+        subprocess.Popen(
+            ['systemctl', 'restart', 'vyomni-agent'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        # 如果 systemctl 不可用（非 systemd 环境），用 exec 重启
         try:
-            current_script = os.path.abspath(sys.argv[0])
-            bak_path = current_script + '.bak'
-            if os.path.exists(bak_path):
-                shutil.move(bak_path, current_script)
-                print('[UPGRADE] Rolled back to previous version')
-        except Exception as rb_err:
-            print(f'[UPGRADE] Rollback failed: {rb_err}', file=sys.stderr)
-        return False
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception as e:
+            print(f'[UPGRADE] ⚠️ 自动重启失败: {e}，请手动重启服务', file=sys.stderr)
+
+    return True
 
 
-# === 系统采集（公共） ===
+def _cleanup_upgrade_dir():
+    """清理临时下载文件"""
+    if os.path.exists(UPGRADE_DIR):
+        for f in os.listdir(UPGRADE_DIR):
+            if f.endswith('.new'):
+                os.remove(os.path.join(UPGRADE_DIR, f))
+
+
+def _rollback_upgrade(agent_dir, backup_dir, files):
+    """升级失败时回滚"""
+    print('[UPGRADE] 执行回滚...', file=sys.stderr)
+    for filename in files:
+        backup_file = os.path.join(backup_dir, filename)
+        target = os.path.join(agent_dir, filename)
+        if os.path.exists(backup_file):
+            shutil.copy2(backup_file, target)
+            print(f'[UPGRADE]   回滚: {filename}', file=sys.stderr)
+
+
+
 def collect_system():
     """采集系统资源（CPU/内存/负载）— CPU 使用差值法计算瞬时值"""
     global _prev_cpu_idle, _prev_cpu_total

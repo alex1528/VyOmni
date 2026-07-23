@@ -349,6 +349,7 @@ def build_report_response(node_id):
             response['upgrade_available'] = {
                 'version': upgrade_info['version'],
                 'sha256': upgrade_info.get('sha256', ''),
+                'files': ['agent_common.py', 'collector.py', 'branch_agent.py'],
             }
 
     return response
