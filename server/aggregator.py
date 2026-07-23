@@ -35,6 +35,8 @@ UPGRADE_DIR = os.path.join(DATA_DIR, 'upgrades')
 state_lock = Lock()
 nodes = {}  # node_id -> node_info
 hq_state = {}  # 最近一次总部上报
+prev_peer_transfer = {}  # {peer_key: {'rx': bytes, 'tx': bytes, 'time': ts}}
+prev_report_time = 0
 branch_states = {}  # branch_id -> 最近一次分支上报
 upgrade_info = None  # 当前可用升级信息
 deploy_tokens = {}  # token_str -> token_info
@@ -172,9 +174,17 @@ def write_status_files():
     now = int(time.time())
 
     # status-tunnel.json
+    global prev_peer_transfer, prev_report_time
+
     raw_peers = hq_state.get('peers', [])
+    report_time = hq_state.get('timestamp', now)
+    dt = report_time - prev_report_time if prev_report_time > 0 else 0
+
     enriched_peers = []
     active_count = 0
+    total_rx_rate = 0.0
+    total_tx_rate = 0.0
+
     for p in raw_peers:
         handshake_ts = p.get('latest_handshake', 0)
         handshake_ago = (now - handshake_ts) if handshake_ts > 0 else 99999
@@ -182,31 +192,52 @@ def write_status_files():
         if is_online:
             active_count += 1
 
-        # 字段映射：collector 上报格式 → 前端期望格式
+        # 实时速率计算：(本次累计字节 - 上次累计字节) / 时间差
         transfer_rx = p.get('transfer_rx', 0)
         transfer_tx = p.get('transfer_tx', 0)
+        peer_key = p.get('public_key', '') or p.get('endpoint', '')
+
+        rx_rate = 0.0
+        tx_rate = 0.0
+        if peer_key and peer_key in prev_peer_transfer and dt > 0:
+            prev = prev_peer_transfer[peer_key]
+            delta_rx = transfer_rx - prev['rx']
+            delta_tx = transfer_tx - prev['tx']
+            # 防止计数器重置导致负值
+            if delta_rx >= 0 and delta_tx >= 0:
+                rx_rate = round(delta_rx * 8 / dt / 1_000_000, 3)  # Mbps
+                tx_rate = round(delta_tx * 8 / dt / 1_000_000, 3)
+
+        # 更新历史记录
+        if peer_key:
+            prev_peer_transfer[peer_key] = {'rx': transfer_rx, 'tx': transfer_tx}
+
+        total_rx_rate += rx_rate
+        total_tx_rate += tx_rate
 
         enriched_peers.append({
             'interface': p.get('interface', ''),
-            'peer': p.get('public_key', ''),
-            'name': p.get('public_key', 'unknown'),
+            'peer': peer_key,
+            'name': peer_key if peer_key else 'unknown',
             'branch_id': '',
             'status': 'online' if is_online else 'offline',
             'endpoint': p.get('endpoint', ''),
             'allowed_ips': p.get('allowed_ips', ''),
             'last_handshake_seconds_ago': handshake_ago,
-            'rx_rate_mbps': round(transfer_rx / 1_000_000, 2) if transfer_rx else 0,
-            'tx_rate_mbps': round(transfer_tx / 1_000_000, 2) if transfer_tx else 0,
+            'rx_rate_mbps': rx_rate,
+            'tx_rate_mbps': tx_rate,
             'transfer_rx': transfer_rx,
             'transfer_tx': transfer_tx,
         })
+
+    prev_report_time = report_time
 
     tunnel_data = {
         'updated_at': now,
         'collector_heartbeat': hq_state.get('timestamp', 0),
         'system': hq_state.get('system', {}),
         'peers': enriched_peers,
-        'totals': {'rx_mbps': 0, 'tx_mbps': 0},
+        'totals': {'rx_mbps': round(total_rx_rate, 2), 'tx_mbps': round(total_tx_rate, 2)},
     }
     tunnel_data['system']['hostname'] = hq_state.get('hostname', 'Unknown')
     tunnel_data['system']['tunnel_active'] = active_count
@@ -547,7 +578,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 'updated_at': 0,
                 'collector_heartbeat': 0,
                 'system': {'hostname': 'waiting...', 'cpu_percent': 0, 'memory_percent': 0, 'tunnel_active': 0, 'tunnel_total': 0},
-                'totals': {'rx_mbps': 0, 'tx_mbps': 0},
+                'totals': {'rx_mbps': round(total_rx_rate, 2), 'tx_mbps': round(total_tx_rate, 2)},
                 'peers': []
             })
 
