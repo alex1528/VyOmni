@@ -1097,3 +1097,31 @@ body {
     border-radius: 4px;
     font-size: 0.82em;
 }
+
+/* === 接口流量行（紧凑不换行） === */
+.iface-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--border-color, #2a3a4a);
+    font-size: 0.82em;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.iface-name {
+    color: var(--text-secondary);
+    min-width: 40px;
+    flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.iface-rate {
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9em;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

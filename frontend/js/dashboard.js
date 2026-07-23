@@ -147,7 +147,7 @@ function showBranchDetail(br) {
             <div class="detail-item"><span class="label">状态</span><span class="value">${br.stale ? '🟡 中断' : '🟢 正常'}</span></div>
             <div class="detail-item"><span class="label">CPU</span><span class="value">${br.cpu_percent?.toFixed(1) || '-'}%</span></div>
             <div class="detail-item"><span class="label">内存</span><span class="value">${br.memory_percent?.toFixed(1) || '-'}%</span></div>
-            <div class="detail-item"><span class="label">负载 1/5/15</span><span class="value">${br.load_1m || '-'} / ${br.load_5m || '-'} / ${br.load_15m || '-'}</span></div>
+            <div class="detail-item"><span class="label">负载 1/5/15</span><span class="value">${(br.load_1m != null ? br.load_1m : '-')} / ${(br.load_5m != null ? br.load_5m : '-')} / ${(br.load_15m != null ? br.load_15m : '-')}</span></div>
             <div class="detail-item"><span class="label">上报时间</span><span class="value">${formatTime(br.reported_at)}</span></div>
             ${ifaceRows}
         </div>
@@ -303,9 +303,17 @@ function renderBranchGrid() {
         const isStale = br.stale || (now - br.reported_at > BRANCH_STALE_SEC);
         const statusClass = isStale ? 'stale' : 'active';
         const statusLabel = isStale ? '上报中断' : '正常';
-        const ifaceHtml = br.interfaces ? Object.entries(br.interfaces).map(([iface, data]) =>
-            `<div class="metric"><span class="label">${iface} ↓↑</span><span class="value">${data.rx_mbps}/${data.tx_mbps} Mbps</span></div>`
-        ).join('') : '';
+        const ifaceHtml = br.interfaces ? Object.entries(br.interfaces)
+            .filter(([iface, data]) => {
+                // 隐藏无流量接口
+                const rx = data.rx_mbps || 0, tx = data.tx_mbps || 0;
+                return (rx + tx) > 0 || iface === 'wg0' || iface === 'eth0';
+            })
+            .map(([iface, data]) => {
+                const rx = formatRate(data.rx_mbps);
+                const tx = formatRate(data.tx_mbps);
+                return `<div class="iface-row"><span class="iface-name">${iface}</span><span class="iface-rate">↓${rx} ↑${tx}</span></div>`;
+            }).join('') : '';
 
         return `
         <div class="branch-card ${statusClass}" data-branch='${escAttr(JSON.stringify(br))}'>
@@ -316,7 +324,7 @@ function renderBranchGrid() {
             <div class="card-metrics">
                 <div class="metric"><span class="label">CPU</span><span class="value">${br.cpu_percent?.toFixed(1) || '-'}%</span></div>
                 <div class="metric"><span class="label">内存</span><span class="value">${br.memory_percent?.toFixed(1) || '-'}%</span></div>
-                <div class="metric"><span class="label">负载 1/5/15</span><span class="value">${br.load_1m || '-'} / ${br.load_5m || '-'} / ${br.load_15m || '-'}</span></div>
+                <div class="metric"><span class="label">负载 1/5/15</span><span class="value">${(br.load_1m != null ? br.load_1m : '-')} / ${(br.load_5m != null ? br.load_5m : '-')} / ${(br.load_15m != null ? br.load_15m : '-')}</span></div>
                 <div class="metric"><span class="label">上报时间</span><span class="value">${formatTime(br.reported_at)}</span></div>
                 ${ifaceHtml}
             </div>
@@ -575,76 +583,156 @@ function updateTopology() {
 // ==================== 分支地图 ====================
 function updateMap() {
     if (!chartMap || !branchData) return;
-    const branches = branchData.branches;
 
-    // 从 configData.geo_locations 获取经纬度（按 branch_id 或 hostname 匹配）
-    const geoMap = (configData && configData.geo_locations) || {};
+    // 内置城市坐标表
+    const CITY_COORDS = {
+        '常州': [119.97, 31.81], '上海': [121.47, 31.23], '北京': [116.40, 39.90],
+        '广州': [113.26, 23.13], '深圳': [114.06, 22.55], '成都': [104.07, 30.57],
+        '杭州': [120.15, 30.27], '南京': [118.78, 32.06], '武汉': [114.30, 30.59],
+        '西安': [108.94, 34.26], '重庆': [106.55, 29.56], '天津': [117.20, 39.08],
+        '苏州': [120.62, 31.30], '无锡': [120.31, 31.49], '合肥': [117.28, 31.82],
+        '郑州': [113.65, 34.76], '长沙': [112.94, 28.23], '济南': [117.00, 36.67],
+        '青岛': [120.38, 36.07], '大连': [121.62, 38.91], '厦门': [118.09, 24.48],
+        '昆明': [102.83, 25.02], '贵阳': [106.63, 26.65], '南宁': [108.37, 22.82],
+        '海口': [110.35, 20.02], '哈尔滨': [126.63, 45.75], '长春': [125.32, 43.88],
+        '沈阳': [123.43, 41.80], '石家庄': [114.48, 38.03], '太原': [112.55, 37.87],
+        '兰州': [103.83, 36.06], '乌鲁木齐': [87.62, 43.83], '拉萨': [91.17, 29.65],
+        '呼和浩特': [111.75, 40.84], '银川': [106.23, 38.49], '西宁': [101.78, 36.62],
+        'changzhou': [119.97, 31.81], 'shanghai': [121.47, 31.23], 'beijing': [116.40, 39.90],
+        'guangzhou': [113.26, 23.13], 'shenzhen': [114.06, 22.55], 'chengdu': [104.07, 30.57],
+        'hangzhou': [120.15, 30.27], 'nanjing': [118.78, 32.06], 'wuhan': [114.30, 30.59],
+        'xian': [108.94, 34.26], 'chongqing': [106.55, 29.56], 'tianjin': [117.20, 39.08],
+        'suzhou': [120.62, 31.30], 'wuxi': [120.31, 31.49], 'hefei': [117.28, 31.82],
+    };
 
-    const scatterData = branches.map((br, i) => {
-        // 尝试匹配 geo_locations：先用 branch_id，再用 hostname 的前缀
-        const bid = br.branch_id || br.hostname || '';
-        let geo = null;
+    // 根据名称自动匹配坐标
+    function resolveCoords(br) {
+        const geoMap = (configData && configData.geo_locations) || {};
+        const bid = (br.branch_id || br.hostname || '').toLowerCase();
+        const hostname = (br.hostname || '').toLowerCase();
+
+        // 优先从 configData.geo_locations 匹配
         for (const [key, val] of Object.entries(geoMap)) {
-            if (bid.toLowerCase().includes(key.toLowerCase()) ||
-                (br.hostname && br.hostname.toLowerCase().includes(key.toLowerCase()))) {
-                geo = val;
-                break;
+            if (bid.includes(key.toLowerCase()) || hostname.includes(key.toLowerCase())) {
+                return { coords: [val.lng, val.lat], label: val.label || key };
             }
         }
-        const lat = geo ? geo.lat : (25 + i * 3);
-        const lng = geo ? geo.lng : (105 + i * 5);
-        const label = geo ? geo.label : bid;
 
-        const now = Math.floor(Date.now() / 1000);
+        // 从内置城市表模糊匹配
+        for (const [city, coords] of Object.entries(CITY_COORDS)) {
+            if (bid.includes(city) || hostname.includes(city)) {
+                return { coords, label: city };
+            }
+        }
+
+        // 未匹配：随机散布在中国中部区域
+        return { coords: [108 + Math.random() * 10, 28 + Math.random() * 8], label: br.branch_id || 'unknown' };
+    }
+
+    const branches = branchData.branches || [];
+    const now = Math.floor(Date.now() / 1000);
+
+    const scatterData = branches.map(br => {
+        const resolved = resolveCoords(br);
         const lastSeen = br.last_seen || br.reported_at || 0;
         const isStale = br.stale || (now - lastSeen > BRANCH_STALE_SEC);
-        const cpuVal = (br.system && br.system.cpu_percent) || br.cpu_percent || 0;
+        const cpuVal = br.cpu_percent || (br.system && br.system.cpu_percent) || 0;
 
         return {
-            name: label || bid,
-            value: [lng, lat, cpuVal],
+            name: resolved.label,
+            value: [...resolved.coords, cpuVal],
             itemStyle: { color: isStale ? '#ffa726' : '#66bb6a' },
-            symbolSize: isStale ? 12 : 18,
+            symbolSize: isStale ? 14 : 20,
         };
     });
 
-    const hasGeo = echarts.getMap && echarts.getMap('china');
-    if (hasGeo) {
+    // 尝试加载中国地图
+    if (!updateMap._mapLoaded) {
+        updateMap._mapLoaded = 'loading';
+        fetch('assets/china.json')
+            .then(r => { if (r.ok) return r.json(); throw new Error('no map'); })
+            .then(geoJson => {
+                echarts.registerMap('china', geoJson);
+                updateMap._mapLoaded = 'done';
+                updateMap(); // 重新渲染
+            })
+            .catch(() => {
+                updateMap._mapLoaded = 'fallback';
+                updateMap(); // 用 fallback 模式渲染
+            });
+        return;
+    }
+
+    if (updateMap._mapLoaded === 'loading') return;
+
+    if (updateMap._mapLoaded === 'done') {
+        // 中国地图模式
         chartMap.setOption({
             backgroundColor: 'transparent',
+            tooltip: {
+                trigger: 'item',
+                formatter: (p) => `<b>${p.name}</b><br/>CPU: ${p.value[2]}%<br/>状态: ${p.data.itemStyle.color === '#66bb6a' ? '正常' : '中断'}`
+            },
             geo: {
                 map: 'china',
                 roam: true,
-                itemStyle: { areaColor: '#1e2d3d', borderColor: '#3a4a5a' },
-                emphasis: { itemStyle: { areaColor: '#2a3a4a' } },
-                label: { show: false }
+                zoom: 1.2,
+                itemStyle: {
+                    areaColor: 'var(--bg-card, #1e2d3d)',
+                    borderColor: 'var(--border-color, #3a4a5a)',
+                    borderWidth: 0.5,
+                },
+                emphasis: {
+                    itemStyle: { areaColor: '#2a3a4a' },
+                    label: { show: false }
+                },
+                label: { show: false },
             },
-            tooltip: { trigger: 'item', formatter: (p) => `${p.name}<br/>CPU: ${p.value[2]}%` },
             series: [{
-                type: 'scatter',
+                type: 'effectScatter',
                 coordinateSystem: 'geo',
                 data: scatterData,
                 encode: { value: 2 },
-                label: { show: true, formatter: '{b}', position: 'right', fontSize: 11 },
+                showEffectOn: 'render',
+                rippleEffect: { brushType: 'stroke', scale: 3 },
+                label: {
+                    show: true,
+                    formatter: '{b}',
+                    position: 'right',
+                    fontSize: 11,
+                    color: 'var(--text-primary, #e8eaed)',
+                },
             }]
-        });
+        }, true);
     } else {
+        // Fallback：笛卡尔坐标散点图
         chartMap.setOption({
             backgroundColor: 'transparent',
             tooltip: { trigger: 'item', formatter: (p) => `${p.name}<br/>CPU: ${p.value[2]}%` },
-            xAxis: { type: 'value', min: 95, max: 125, name: '经度', axisLine: { lineStyle: { color: '#555' } }, splitLine: { lineStyle: { color: '#2a3a4a' } } },
-            yAxis: { type: 'value', min: 20, max: 45, name: '纬度', axisLine: { lineStyle: { color: '#555' } }, splitLine: { lineStyle: { color: '#2a3a4a' } } },
+            xAxis: { type: 'value', min: 85, max: 135, name: '经度', axisLine: { lineStyle: { color: '#555' } }, splitLine: { lineStyle: { color: '#2a3a4a' } } },
+            yAxis: { type: 'value', min: 18, max: 50, name: '纬度', axisLine: { lineStyle: { color: '#555' } }, splitLine: { lineStyle: { color: '#2a3a4a' } } },
             series: [{
-                type: 'scatter',
+                type: 'effectScatter',
                 data: scatterData.map(d => ({ name: d.name, value: d.value, itemStyle: d.itemStyle, symbolSize: d.symbolSize })),
-                label: { show: true, formatter: '{b}', position: 'right', fontSize: 11, color: 'var(--text-primary)' },
-                emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(79,195,247,0.5)' } }
+                rippleEffect: { brushType: 'stroke', scale: 3 },
+                label: { show: true, formatter: '{b}', position: 'right', fontSize: 11, color: '#e8eaed' },
             }]
-        });
+        }, true);
     }
 }
+updateMap._mapLoaded = false;
+
 
 // ==================== 工具函数 ====================
+
+// 自适应速率格式化
+function formatRate(mbps) {
+    if (mbps === undefined || mbps === null) return '0';
+    if (mbps === 0) return '0';
+    if (mbps < 0.01) return '<0.01';
+    if (mbps >= 1) return mbps.toFixed(1);
+    return mbps.toFixed(2);
+}
 function formatTime(unixTs) {
     if (!unixTs) return '--:--:--';
     return new Date(unixTs * 1000).toLocaleTimeString('zh-CN', { hour12: false });
