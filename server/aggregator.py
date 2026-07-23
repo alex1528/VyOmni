@@ -80,6 +80,7 @@ def save_peer_aliases():
 
 prev_branch_interfaces = {}  # {branch_id: {iface: {'rx': bytes, 'tx': bytes}}}
 prev_branch_report_time = {}  # {branch_id: last_report_timestamp}
+prev_branch_rates = {}  # {branch_id: {iface: {'rx_mbps': float, 'tx_mbps': float}}} — 缓存上次计算的速率
 prev_hq_interfaces = {}  # {iface: {'rx': bytes, 'tx': bytes}}
 prev_report_time = 0
 branch_states = {}  # branch_id -> 最近一次分支上报
@@ -423,9 +424,10 @@ def write_status_files():
         json.dump(tunnel_data, f, indent=2)
 
     # status-branches.json — 仅包含 approved 节点
-    global prev_branch_interfaces, prev_branch_report_time
+    global prev_branch_interfaces, prev_branch_report_time, prev_branch_rates
 
     # 构建 IP→peer信息 映射（从 HQ peers 数据中提取）
+    # key=endpoint_ip, value={'peer_key': 完整公钥, 'allowed_ips': 字符串}
     # key=endpoint_ip, value={'peer_key': 完整公钥, 'allowed_ips': 字符串}
     peer_endpoint_map = {}
     for p in enriched_peers:
@@ -452,40 +454,47 @@ def write_status_files():
         raw_ifaces = bstate.get('interfaces', {})
 
         # 接口速率差值计算
-        enriched_ifaces = {}
         prev_ifaces = prev_branch_interfaces.get(bid, {})
         prev_ts = prev_branch_report_time.get(bid, 0)
         dt_branch = (report_ts - prev_ts) if (prev_ts > 0 and report_ts > prev_ts) else 0
 
-        for iface, idata in raw_ifaces.items():
-            rx_bytes = idata.get('rx_bytes', 0)
-            tx_bytes = idata.get('tx_bytes', 0)
-            rx_rate = 0.0
-            tx_rate = 0.0
+        if dt_branch > 0:
+            # 有新数据，重新计算速率
+            enriched_ifaces = {}
+            for iface, idata in raw_ifaces.items():
+                rx_bytes = idata.get('rx_bytes', 0)
+                tx_bytes = idata.get('tx_bytes', 0)
+                rx_rate = 0.0
+                tx_rate = 0.0
 
-            if iface in prev_ifaces:
-                prev = prev_ifaces[iface]
-                # 使用上报间隔作为时间差（branch 固定间隔上报）
-                dt = dt_branch
-                delta_rx = rx_bytes - prev.get('rx', 0)
-                delta_tx = tx_bytes - prev.get('tx', 0)
-                if delta_rx >= 0 and delta_tx >= 0 and dt > 0:
-                    rx_rate = round(delta_rx * 8 / dt / 1_000_000, 3)
-                    tx_rate = round(delta_tx * 8 / dt / 1_000_000, 3)
+                if iface in prev_ifaces:
+                    prev = prev_ifaces[iface]
+                    delta_rx = rx_bytes - prev.get('rx', 0)
+                    delta_tx = tx_bytes - prev.get('tx', 0)
+                    if delta_rx >= 0 and delta_tx >= 0:
+                        rx_rate = round(delta_rx * 8 / dt_branch / 1_000_000, 3)
+                        tx_rate = round(delta_tx * 8 / dt_branch / 1_000_000, 3)
 
-            enriched_ifaces[iface] = {
-                'rx_mbps': rx_rate,
-                'tx_mbps': tx_rate,
-                'rx_bytes': rx_bytes,
-                'tx_bytes': tx_bytes,
+                enriched_ifaces[iface] = {
+                    'rx_mbps': rx_rate,
+                    'tx_mbps': tx_rate,
+                    'rx_bytes': rx_bytes,
+                    'tx_bytes': tx_bytes,
+                }
+
+            # 仅在有新数据时更新历史
+            prev_branch_interfaces[bid] = {
+                iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
+                for iface, idata in raw_ifaces.items()
             }
-
-        # 更新历史
-        prev_branch_interfaces[bid] = {
-            iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
-            for iface, idata in raw_ifaces.items()
-        }
-        prev_branch_report_time[bid] = report_ts
+            prev_branch_report_time[bid] = report_ts
+            prev_branch_rates[bid] = enriched_ifaces
+        else:
+            # 无新数据，使用上次缓存的速率结果
+            enriched_ifaces = prev_branch_rates.get(bid, {
+                iface: {'rx_mbps': 0, 'tx_mbps': 0, 'rx_bytes': idata.get('rx_bytes', 0), 'tx_bytes': idata.get('tx_bytes', 0)}
+                for iface, idata in raw_ifaces.items()
+            })
 
         branches.append({
             'branch_id': bid,
