@@ -265,7 +265,7 @@ function renderPeerGrid() {
         return `
         <div class="peer-card ${statusClass} ${animClass}" data-peer='${escAttr(JSON.stringify(peer))}'>
             <div class="card-header">
-                <span class="name"><i class="fas fa-globe"></i> ${escHtml(peer.display_name || peer.name)}</span>
+                <span class="name"><i class="fas fa-globe"></i> ${escHtml(peer.display_name || peer.name)} <i class="fas fa-pen peer-rename-btn" data-peer-key="${escAttr(peer.peer)}" data-current-name="${escAttr(peer.display_name || peer.name)}" title="设置别名" style="font-size:0.7em;opacity:0.5;cursor:pointer"></i></span>
                 <span class="status ${statusClass}">${peer.status === 'online' ? 'CONNECTED' : 'DISCONNECTED'}</span>
             </div>
             <div class="card-metrics">
@@ -278,6 +278,16 @@ function renderPeerGrid() {
             </div>
         </div>`;
     }).join('');
+
+    // 绑定别名编辑按钮
+    grid.querySelectorAll('.peer-rename-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const peerKey = btn.dataset.peerKey;
+            const currentName = btn.dataset.currentName;
+            setPeerAlias(peerKey, currentName);
+        });
+    });
 
     // 绑定点击事件
     grid.querySelectorAll('.peer-card').forEach(card => {
@@ -1406,6 +1416,27 @@ async function renameNode(nodeId, currentName) {
         } else {
             const err = await resp.json().catch(() => ({}));
             alert('重命名失败: ' + (err.error || 'HTTP ' + resp.status));
+        }
+    } catch(e) {
+        alert('请求失败: ' + e.message);
+    }
+}
+
+async function setPeerAlias(peerKey, currentName) {
+    const newName = prompt('设置隧道 Peer 显示别名:', currentName);
+    if (newName === null || newName.trim() === '') return;
+    try {
+        const resp = await fetch('/api/peers/alias', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({peer_key: peerKey, alias: newName.trim()}),
+        });
+        if (resp.ok) {
+            // 下次轮询时自动刷新
+            poll();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            alert('设置失败: ' + (err.error || 'HTTP ' + resp.status));
         }
     } catch(e) {
         alert('请求失败: ' + e.message);

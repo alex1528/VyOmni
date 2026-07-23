@@ -61,6 +61,23 @@ state_lock = Lock()
 nodes = {}  # node_id -> node_info
 hq_state = {}  # 最近一次总部上报
 prev_peer_transfer = {}  # {peer_key: {'rx': bytes, 'tx': bytes, 'time': ts}}
+peer_aliases = {}  # {peer_public_key: display_name}
+PEER_ALIASES_FILE = os.path.join(DATA_DIR, 'peer_aliases.json')
+
+def load_peer_aliases():
+    global peer_aliases
+    if os.path.exists(PEER_ALIASES_FILE):
+        try:
+            with open(PEER_ALIASES_FILE) as f:
+                peer_aliases = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            peer_aliases = {}
+
+def save_peer_aliases():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(PEER_ALIASES_FILE, 'w') as f:
+        json.dump(peer_aliases, f, indent=2, ensure_ascii=False)
+
 prev_branch_interfaces = {}  # {branch_id: {iface: {'rx': bytes, 'tx': bytes}}}
 prev_report_time = 0
 branch_states = {}  # branch_id -> 最近一次分支上报
@@ -275,7 +292,7 @@ def write_status_files():
         enriched_peers.append({
             'interface': p.get('interface', ''),
             'peer': peer_key,
-            'name': peer_key[:16] + '...' if len(peer_key) > 16 else (peer_key or 'unknown'),
+            'name': peer_aliases.get(peer_key, peer_key[:16] + '...' if len(peer_key) > 16 else (peer_key or 'unknown')),
             'branch_id': '',
             'status': 'online' if is_online else 'offline',
             'endpoint': p.get('endpoint', ''),
@@ -307,6 +324,17 @@ def write_status_files():
 
     # status-branches.json — 仅包含 approved 节点
     global prev_branch_interfaces
+
+    # 构建 IP→allowed_ips 映射（从 HQ peers 数据中提取）
+    peer_allowed_map = {}  # {endpoint_ip: allowed_ips_string}
+    for p in enriched_peers:
+        ep = p.get('endpoint', '')
+        if ':' in ep:
+            ep_ip = ep.rsplit(':', 1)[0]  # 去掉端口
+        else:
+            ep_ip = ep
+        if ep_ip and p.get('allowed_ips'):
+            peer_allowed_map[ep_ip] = p['allowed_ips']
 
     branches = []
     for bid, bstate in branch_states.items():
@@ -550,6 +578,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.handle_register()
         elif path == '/report':
             self.handle_report()
+        elif path == '/api/peers/alias':
+            self.handle_set_peer_alias()
         elif path.startswith('/api/nodes/') and path.endswith('/rename'):
             node_id = path.split('/')[3]
             self.handle_rename_node(node_id)
@@ -970,6 +1000,32 @@ class ApiHandler(BaseHTTPRequestHandler):
             nodes[node_id].setdefault('pending_config', {})['status'] = 'rejected'
             save_nodes()
         self.send_json(200, {'status': 'rejected', 'node_id': node_id})
+
+    def handle_set_peer_alias(self):
+        """POST /api/peers/alias — 设置 peer 公钥的显示别名"""
+        body = self.read_body()
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_json(400, {'error': 'invalid JSON'})
+            return
+
+        peer_key = payload.get('peer_key', '').strip()
+        alias = payload.get('alias', '').strip()
+        if not peer_key or not alias:
+            self.send_json(400, {'error': 'peer_key and alias are required'})
+            return
+
+        load_peer_aliases()
+        peer_aliases[peer_key] = alias
+        save_peer_aliases()
+        print(f'[PEER] Alias set: {peer_key[:16]}... → "{alias}"')
+        self.send_json(200, {'status': 'ok', 'peer_key': peer_key, 'alias': alias})
+
+    def handle_get_peer_aliases(self):
+        """GET /api/peers/aliases — 获取所有 peer 别名"""
+        load_peer_aliases()
+        self.send_json(200, {'aliases': peer_aliases})
 
     def handle_rename_node(self, node_id):
         """POST /api/nodes/{id}/rename — 设置节点自定义显示名称"""

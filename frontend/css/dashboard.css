@@ -1208,3 +1208,19 @@ body {
 .peer-card .card-metrics .metric:nth-child(6) {
     grid-column: 1 / -1;
 }
+
+/* === Allowed IPs 竖排显示 === */
+.metric-full {
+    grid-column: 1 / -1;
+}
+
+.allowed-ips {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    line-height: 1.6;
+}
+
+.peer-rename-btn:hover {
+    opacity: 1 !important;
+    color: var(--accent-blue);
+}
