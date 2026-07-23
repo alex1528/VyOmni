@@ -241,6 +241,22 @@ def verify_signature(body_bytes, ts_str, sig_str, hmac_key):
 
 
 # === 状态文件写入（兼容旧版前端） ===
+def _resolve_branch_display_name(node_info, peer_allowed_map):
+    """查找分支节点的显示别名（优先 peer_aliases，fallback 到 node display_name）"""
+    # 方式1：通过 node IP 在 peer_allowed_map 中找到对应 peer_key → 查 peer_aliases
+    node_ip = node_info.get('ip', '')
+    if node_ip and peer_aliases:
+        for peer_key, alias in peer_aliases.items():
+            # 检查该 peer 的 endpoint IP 是否匹配 node IP
+            # peer_allowed_map 的 key 是 endpoint_ip
+            if node_ip in peer_allowed_map:
+                # 这个 node 的 IP 是某个 peer 的 endpoint → 使用该 peer 的别名
+                return alias
+        # 也可通过 enriched_peers 查找
+    # 方式2：node 自身的 display_name
+    return node_info.get('display_name', '')
+
+
 def write_status_files():
     """将聚合状态写入 JSON 文件供 Nginx 静态服务"""
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -384,7 +400,7 @@ def write_status_files():
         branches.append({
             'branch_id': bid,
             'hostname': bstate.get('hostname', bid),
-            'display_name': node_info.get('display_name', '') if node_info else '',
+            'display_name': _resolve_branch_display_name(node_info, peer_allowed_map) if node_info else '',
             'reported_at': report_ts,
             'last_seen': report_ts,
             'online': now - report_ts < 60,
@@ -1019,6 +1035,9 @@ class ApiHandler(BaseHTTPRequestHandler):
         load_peer_aliases()
         peer_aliases[peer_key] = alias
         save_peer_aliases()
+        # 立即刷新 status 文件（前端下次轮询即可获取新别名）
+        with state_lock:
+            write_status_files()
         print(f'[PEER] Alias set: {peer_key[:16]}... → "{alias}"')
         self.send_json(200, {'status': 'ok', 'peer_key': peer_key, 'alias': alias})
 

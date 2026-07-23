@@ -1432,8 +1432,8 @@ async function setPeerAlias(peerKey, currentName) {
             body: JSON.stringify({peer_key: peerKey, alias: newName.trim()}),
         });
         if (resp.ok) {
-            // 下次轮询时自动刷新
-            poll();
+            // 延迟 500ms 后刷新（等 aggregator 写入完成）
+            setTimeout(() => poll(), 500);
         } else {
             const err = await resp.json().catch(() => ({}));
             alert('设置失败: ' + (err.error || 'HTTP ' + resp.status));
