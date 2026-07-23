@@ -40,7 +40,7 @@ def collect_interfaces():
 
 
 def collect_wg_peers():
-    """采集本节点 WireGuard peers 的 allowed_ips（分支自身视角）"""
+    """采集本节点 WireGuard peers 完整信息（分支自身视角）"""
     import subprocess
     peers_info = []
     try:
@@ -56,9 +56,11 @@ def collect_wg_peers():
             # peer 行有 9 个字段
             if len(fields) >= 8 and fields[3] != '(none)':
                 peers_info.append({
+                    'interface': fields[0],
                     'peer_key': fields[1],
                     'endpoint': fields[3],
                     'allowed_ips': fields[4],
+                    'latest_handshake': int(fields[5]) if fields[5] != '0' else 0,
                 })
     except Exception:
         pass

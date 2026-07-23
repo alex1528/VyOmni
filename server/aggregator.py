@@ -241,6 +241,28 @@ def verify_signature(body_bytes, ts_str, sig_str, hmac_key):
 
 
 # === 状态文件写入（兼容旧版前端） ===
+def _get_branch_wg_field(bstate, field):
+    """从分支 wg_peers 中获取指定字段（取第一个有效 peer）"""
+    wg_peers = bstate.get('wg_peers', [])
+    if wg_peers:
+        for wp in wg_peers:
+            val = wp.get(field, '')
+            if val:
+                return val
+    return ''
+
+
+def _get_branch_handshake_ago(bstate, now):
+    """计算分支 wg peer 的握手距今秒数"""
+    wg_peers = bstate.get('wg_peers', [])
+    if wg_peers:
+        for wp in wg_peers:
+            ts = wp.get('latest_handshake', 0)
+            if ts > 0:
+                return now - ts
+    return -1
+
+
 def _get_branch_endpoint(bstate):
     """获取分支节点连接的对端 Endpoint（分支自身 wg dump 中的 peer endpoint）"""
     wg_peers = bstate.get('wg_peers', [])
@@ -443,7 +465,9 @@ def write_status_files():
             'system': sys_data,
             # IP 地理位置
             'geo': node_info.get('geo', None),
-            # 从分支自身 wg_peers 获取 endpoint 和 allowed_ips
+            # 从分支自身 wg_peers 获取 interface/握手/endpoint/allowed_ips
+            'wg_interface': _get_branch_wg_field(bstate, 'interface'),
+            'wg_handshake_seconds_ago': _get_branch_handshake_ago(bstate, now),
             'endpoint': _get_branch_endpoint(bstate),
             'allowed_ips': _get_branch_allowed_ips(bstate, peer_endpoint_map, node_info),
         })
