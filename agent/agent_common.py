@@ -79,16 +79,98 @@ def detect_role():
 
 
 # === 获取本机 IP ===
-def get_local_ip():
-    """获取本机出口 IP"""
+def is_private_ip(ip):
+    """判断是否为私有网络地址"""
+    import ipaddress
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+        addr = ipaddress.ip_address(ip)
+        return addr.is_private
     except Exception:
-        return '0.0.0.0'
+        return True
+
+
+def get_gateway_interface_ip():
+    """获取与默认网关一致的接口 IP"""
+    try:
+        # Linux: 解析 /proc/net/route 获取默认网关对应接口
+        with open('/proc/net/route') as f:
+            lines = f.readlines()[1:]
+        default_iface = None
+        for line in lines:
+            parts = line.strip().split()
+            if len(parts) >= 3 and parts[1] == '00000000':  # 默认路由
+                default_iface = parts[0]
+                break
+
+        if not default_iface:
+            return None
+
+        # 获取该接口的 IP（通过 ip addr 或 /proc）
+        result = subprocess.run(
+            ['ip', '-4', 'addr', 'show', 'dev', default_iface],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            import re
+            match = re.search(r'inet\s+(\d+\.\d+\.\d+\.\d+)', result.stdout)
+            if match:
+                return match.group(1)
+    except Exception:
+        pass
+    return None
+
+
+def get_public_ip():
+    """探测出口公网 IP（通过外部服务）"""
+    # 多个备选探测服务
+    services = [
+        'http://ifconfig.me/ip',
+        'http://ip.sb',
+        'http://ipecho.net/plain',
+        'http://checkip.amazonaws.com',
+    ]
+    for url in services:
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'curl/7.0'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                ip = resp.read().decode().strip()
+                # 验证是合法 IP
+                import ipaddress
+                ipaddress.ip_address(ip)
+                return ip
+        except Exception:
+            continue
+    return None
+
+
+def get_local_ip():
+    """
+    获取节点 IP 地址（智能探测）
+    优先级：
+    1. 获取默认网关接口 IP
+    2. 如果是私有地址 → 探测出口公网 IP
+    3. 返回格式：公网IP（如有）或 私有IP
+    """
+    # 步骤1：获取默认网关接口 IP
+    gateway_ip = get_gateway_interface_ip()
+
+    if not gateway_ip:
+        # fallback: socket 连接法
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('8.8.8.8', 80))
+            gateway_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            gateway_ip = '0.0.0.0'
+
+    # 步骤2：如果是私有地址，探测公网 IP
+    if is_private_ip(gateway_ip):
+        public_ip = get_public_ip()
+        if public_ip:
+            return public_ip
+
+    return gateway_ip
 
 
 # === 凭证管理 ===
