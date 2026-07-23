@@ -756,124 +756,144 @@ function showNodePanel() {
 }
 
 function showAddNodeModal() {
-    const html = `
+    const formHtml = `
     <div class="add-node-form">
-        <h4><i class="fas fa-plus-circle"></i> 新增节点 — 生成部署 Token</h4>
-        <p style="color:var(--text-secondary);margin-bottom:16px;">
-            生成一次性 Token 后，在目标节点执行部署命令即可自动注册。
-        </p>
-        <div class="form-group">
-            <label>节点名称 <span style="color:#ef5350;">*</span></label>
-            <input type="text" id="add-node-name" placeholder="例：上海分部、深圳机房" />
+        <div class="form-header">
+            <i class="fas fa-plus-circle form-header-icon"></i>
+            <div>
+                <h4>新增节点 — 生成部署 Token</h4>
+                <p class="form-desc">生成一次性 Token，在目标节点执行命令即可自动注册</p>
+            </div>
         </div>
-        <div class="form-group">
-            <label>角色</label>
-            <select id="add-node-role">
-                <option value="branch">分支 (Branch)</option>
-                <option value="hq">总部 (HQ)</option>
-            </select>
+        <div class="form-body">
+            <div class="form-group">
+                <label><i class="fas fa-tag"></i> 节点名称 <span class="required">*</span></label>
+                <input type="text" id="add-node-name" placeholder="例：上海分部、深圳机房" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-user-tag"></i> 角色</label>
+                <select id="add-node-role">
+                    <option value="branch">分支 (Branch) — 资源采集上报</option>
+                    <option value="hq">总部 (HQ) — WireGuard 隧道 + 资源采集</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-primary btn-lg" id="btn-generate-token">
+                    <i class="fas fa-key"></i> 生成 Token
+                </button>
+                <button class="btn btn-lg" onclick="closeModal()">
+                    <i class="fas fa-times"></i> 取消
+                </button>
+            </div>
         </div>
-        <div class="form-actions">
-            <button class="btn btn-primary" id="btn-generate-token">
-                <i class="fas fa-key"></i> 生成 Token
-            </button>
-            <button class="btn" onclick="closeModal()">取消</button>
-        </div>
-        <div id="token-result" style="display:none;margin-top:20px;"></div>
+        <div id="token-result"></div>
     </div>`;
 
-    openModal('新增节点', html);
+    openModal('新增节点', formHtml);
 
-    document.getElementById('btn-generate-token').addEventListener('click', async () => {
-        const name = document.getElementById('add-node-name').value.trim();
-        const role = document.getElementById('add-node-role').value;
-
-        if (!name) {
-            alert('请输入节点名称');
-            return;
-        }
-
+    // 延迟绑定确保 DOM 渲染完成
+    setTimeout(() => {
         const btn = document.getElementById('btn-generate-token');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...';
+        if (!btn) { console.error('btn-generate-token not found after modal open'); return; }
 
-        try {
-            const resp = await fetch(NODE_API.generateToken, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, role }),
-            });
+        btn.onclick = async function() {
+            const nameEl = document.getElementById('add-node-name');
+            const roleEl = document.getElementById('add-node-role');
+            if (!nameEl || !roleEl) return;
 
-            if (!resp.ok) {
-                const err = await resp.json();
-                alert('生成失败: ' + (err.error || '未知错误'));
+            const name = nameEl.value.trim();
+            const role = roleEl.value;
+            if (!name) { nameEl.focus(); nameEl.style.borderColor = 'var(--accent-red)'; return; }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...';
+
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 15000);
+
+                const resp = await fetch('/api/tokens/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, role }),
+                    signal: controller.signal,
+                });
+                clearTimeout(timeout);
+
+                let data;
+                const ct = resp.headers.get('content-type') || '';
+                if (ct.includes('application/json')) {
+                    data = await resp.json();
+                } else {
+                    const text = await resp.text();
+                    throw new Error('服务器返回非JSON: ' + text.substring(0, 100));
+                }
+
+                if (!resp.ok) {
+                    throw new Error(data.error || '生成失败 (HTTP ' + resp.status + ')');
+                }
+
+                // 成功 - 显示结果
+                showTokenResult(data);
+            } catch (e) {
+                const msg = e.name === 'AbortError' ? '请求超时(15s)，请检查服务器连接' : e.message;
+                const resultEl = document.getElementById('token-result');
+                if (resultEl) {
+                    resultEl.innerHTML = '<div class="token-error"><i class="fas fa-exclamation-triangle"></i> ' + msg + '</div>';
+                } else {
+                    alert('生成失败: ' + msg);
+                }
+            } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-key"></i> 生成 Token';
-                return;
             }
-
-            const data = await resp.json();
-            showTokenResult(data);
-            fetchTokens();
-        } catch (e) {
-            alert('请求失败: ' + e.message);
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-key"></i> 生成 Token';
-        }
-    });
+        };
+    }, 50);
 }
 
 function showTokenResult(data) {
     const resultEl = document.getElementById('token-result');
-    if (!resultEl) return;
+    if (!resultEl) { console.error('token-result element not found'); return; }
 
-    const expiresIn = data.expires_at - Math.floor(Date.now() / 1000);
-    const expiresHours = Math.floor(expiresIn / 3600);
-    const expiresMinutes = Math.floor((expiresIn % 3600) / 60);
+    const expiresIn = (data.expires_at || 0) - Math.floor(Date.now() / 1000);
+    const hours = Math.max(0, Math.floor(expiresIn / 3600));
+    const minutes = Math.max(0, Math.floor((expiresIn % 3600) / 60));
 
-    resultEl.style.display = 'block';
+    const deployCmd = data.deploy_cmd || 'curl -sL http://' + location.hostname + ':9100/api/deploy/' + data.token + ' | bash';
+    const configContent = data.config_content || 'server_url = http://' + location.hostname + ':9100\nregister_token = ' + data.token;
+
     resultEl.innerHTML = `
-    <div class="token-result-card">
-        <div class="token-result-header">
-            <i class="fas fa-check-circle" style="color:#66bb6a;font-size:1.5em;"></i>
-            <span>Token 生成成功！</span>
+    <div class="token-success-card">
+        <div class="token-success-header">
+            <i class="fas fa-check-circle"></i>
+            <span>Token 生成成功！有效期 ${hours}h${minutes}m</span>
         </div>
 
-        <div class="token-result-section">
-            <label>一键部署命令</label>
+        <div class="token-section">
+            <label><i class="fas fa-terminal"></i> 一键部署命令 <small>（在目标节点以 root 执行）</small></label>
             <div class="copy-box">
-                <code id="deploy-cmd-text">${escHtml(data.deploy_cmd)}</code>
+                <code id="deploy-cmd-text">${deployCmd}</code>
                 <button class="btn btn-xs btn-copy" onclick="copyToClipboard('deploy-cmd-text')">
                     <i class="fas fa-copy"></i> 复制
                 </button>
             </div>
-            <p class="hint">在目标节点以 root 执行此命令，将自动完成部署</p>
         </div>
 
-        <div class="token-result-section">
-            <label>手动配置 (config.conf)</label>
+        <div class="token-section">
+            <label><i class="fas fa-file-alt"></i> 手动配置 (config.conf)</label>
             <div class="copy-box">
-                <pre id="config-text">${escHtml(data.config_content)}</pre>
-                <button class="btn btn-xs btn-copy" onclick="copyToClipboard('config-text')">
+                <pre id="config-content-text">${configContent}</pre>
+                <button class="btn btn-xs btn-copy" onclick="copyToClipboard('config-content-text')">
                     <i class="fas fa-copy"></i> 复制
                 </button>
             </div>
         </div>
 
-        <div class="token-result-section">
-            <label>Token 信息</label>
-            <div class="token-meta">
-                <span><i class="fas fa-key"></i> ${data.token}</span>
-                <span><i class="fas fa-user-tag"></i> ${data.role}</span>
-                <span class="token-countdown" id="token-countdown">
-                    <i class="fas fa-clock"></i> 有效期: ${expiresHours}h ${expiresMinutes}m
-                </span>
-            </div>
+        <div class="token-meta">
+            <span><i class="fas fa-clock"></i> 有效期: ${hours}小时${minutes}分钟</span>
+            <span><i class="fas fa-key"></i> Token: <code>${data.token || '?'}</code></span>
         </div>
     </div>`;
-
-    // 启动倒计时
-    startTokenCountdown(data.expires_at);
 }
 
 function startTokenCountdown(expiresAt) {
@@ -897,26 +917,40 @@ function startTokenCountdown(expiresAt) {
 
 function copyToClipboard(elementId) {
     const el = document.getElementById(elementId);
-    if (!el) return;
-    const text = el.textContent || el.innerText;
-    navigator.clipboard.writeText(text).then(() => {
-        // 显示临时提示
-        const btn = el.parentElement.querySelector('.btn-copy');
+    if (!el) { console.warn('copyToClipboard: element not found:', elementId); return; }
+    const text = (el.textContent || el.innerText || '').trim();
+    if (!text) { console.warn('copyToClipboard: empty text'); return; }
+
+    function onSuccess() {
+        const btn = el.closest('.copy-box')?.querySelector('.btn-copy') || el.parentElement?.querySelector('.btn-copy');
         if (btn) {
             const orig = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-check"></i> 已复制';
             btn.classList.add('copied');
             setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 2000);
         }
-    }).catch(() => {
-        // Fallback
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-    });
+    }
+
+    // 方案1: Clipboard API (requires HTTPS or localhost)
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(onSuccess).catch(() => fallbackCopy(text, onSuccess));
+    } else {
+        fallbackCopy(text, onSuccess);
+    }
+}
+
+function fallbackCopy(text, onSuccess) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+        const ok = document.execCommand('copy');
+        if (ok && onSuccess) onSuccess();
+    } catch(e) { console.warn('execCommand copy failed:', e); }
+    document.body.removeChild(ta);
 }
 
 // ==================== Token 列表 ====================
@@ -938,8 +972,6 @@ function renderTokenList() {
     }
 
     const now = Math.floor(Date.now() / 1000);
-
-    // 按时间倒序
     const sorted = [...tokensData].sort((a, b) => b.created_at - a.created_at);
 
     el.innerHTML = `
@@ -950,31 +982,30 @@ function renderTokenList() {
                 <th>名称</th>
                 <th>角色</th>
                 <th>状态</th>
-                <th>创建时间</th>
                 <th>有效期</th>
+                <th>操作</th>
             </tr>
         </thead>
         <tbody>
             ${sorted.map(tk => {
                 let statusBadge = '';
-                if (tk.status === 'unused') {
-                    const remaining = tk.expires_at - now;
-                    if (remaining <= 0) {
-                        statusBadge = '<span class="status-badge expired"><i class="fas fa-times-circle"></i> 已过期</span>';
-                    } else {
-                        statusBadge = '<span class="status-badge pending"><i class="fas fa-clock"></i> 待使用</span>';
-                    }
+                let canDelete = false;
+                const remaining = tk.expires_at - now;
+
+                if (tk.status === 'unused' && remaining > 0) {
+                    statusBadge = '<span class="status-badge pending"><i class="fas fa-clock"></i> 待使用</span>';
+                    canDelete = true;
                 } else if (tk.status === 'used') {
                     statusBadge = '<span class="status-badge approved"><i class="fas fa-check-circle"></i> 已使用</span>';
                 } else {
                     statusBadge = '<span class="status-badge expired"><i class="fas fa-times-circle"></i> 已过期</span>';
+                    canDelete = true;
                 }
 
                 const roleBadge = tk.role === 'hq'
                     ? '<span class="role-badge hq">HQ</span>'
                     : '<span class="role-badge branch">Branch</span>';
 
-                const remaining = tk.expires_at - now;
                 let expiryText = '';
                 if (tk.status === 'used') {
                     expiryText = '已消费';
@@ -983,18 +1014,21 @@ function renderTokenList() {
                 } else {
                     const h = Math.floor(remaining / 3600);
                     const m = Math.floor((remaining % 3600) / 60);
-                    expiryText = `${h}h ${m}m`;
+                    expiryText = h > 0 ? h + 'h ' + m + 'm' : m + 'min';
                 }
 
-                return `
-                <tr>
-                    <td><code>${tk.token}</code></td>
-                    <td>${escHtml(tk.name)}</td>
-                    <td>${roleBadge}</td>
-                    <td>${statusBadge}</td>
-                    <td>${formatDateTime(tk.created_at)}</td>
-                    <td>${expiryText}</td>
-                </tr>`;
+                const actionBtn = canDelete
+                    ? '<button class="btn btn-xs btn-danger" onclick="deleteToken(\'' + tk.token + '\')"><i class="fas fa-trash"></i></button>'
+                    : '<span class="text-muted">—</span>';
+
+                return '<tr class="' + (tk.status === 'used' ? 'row-used' : remaining <= 0 ? 'row-expired' : '') + '">' +
+                    '<td><code>' + tk.token + '</code></td>' +
+                    '<td>' + escHtml(tk.name) + '</td>' +
+                    '<td>' + roleBadge + '</td>' +
+                    '<td>' + statusBadge + '</td>' +
+                    '<td>' + expiryText + '</td>' +
+                    '<td>' + actionBtn + '</td>' +
+                    '</tr>';
             }).join('')}
         </tbody>
     </table>`;
@@ -1006,6 +1040,10 @@ async function fetchNodes() {
         nodesData = data.nodes;
         renderNodeStats();
         renderNodeTable();
+    } else {
+        // API 不可达时显示提示
+        const tbody = document.getElementById('node-table-body');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:20px;">暂无节点数据（等待 Agent 注册）</td></tr>';
     }
 }
 
@@ -1188,3 +1226,23 @@ function formatDateTime(unixTs) {
         initNodeManagement();
     }, 100);
 })();
+
+async function deleteToken(tokenId) {
+    if (!confirm('确认删除此 Token？')) return;
+    try {
+        const resp = await fetch('/api/tokens/' + tokenId, { method: 'DELETE' });
+        if (resp.ok) {
+            fetchTokens();
+        } else {
+            const ct = resp.headers.get('content-type') || '';
+            if (ct.includes('json')) {
+                const err = await resp.json();
+                alert('删除失败: ' + (err.error || '未知错误'));
+            } else {
+                alert('删除失败: HTTP ' + resp.status);
+            }
+        }
+    } catch (e) {
+        alert('请求失败: ' + e.message);
+    }
+}

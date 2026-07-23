@@ -425,10 +425,28 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path.startswith('/api/nodes/'):
             node_id = path.split('/')[3]
             self.handle_delete_node(node_id)
+        elif path.startswith('/api/tokens/'):
+            token_id = path.split('/')[3]
+            self.handle_delete_token(token_id)
         else:
             self.send_json(404, {'error': 'not found'})
 
     # --- Token 生成 ---
+    def handle_delete_token(self, token_id):
+        """DELETE /api/tokens/{token} — 删除未使用的 Token"""
+        with state_lock:
+            tokens = load_tokens()
+            if token_id not in tokens:
+                self.send_json(404, {'error': 'Token not found'})
+                return
+            token_info = tokens[token_id]
+            if token_info.get('used', False):
+                self.send_json(400, {'error': 'Cannot delete used token'})
+                return
+            del tokens[token_id]
+            save_tokens(tokens)
+        self.send_json(200, {'status': 'deleted', 'token': token_id})
+
     def handle_generate_token(self):
         """POST /api/tokens/generate — 生成一次性部署 Token"""
         body = self.read_body()

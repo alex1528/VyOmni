@@ -590,3 +590,386 @@ body {
 .nav-btn:active {
     transform: scale(0.95);
 }
+
+/* === 节点管理增强样式 === */
+
+/* 模态弹窗加宽 */
+.modal-panel {
+    max-width: 800px !important;
+    width: 90vw;
+}
+
+/* 新增节点表单 */
+.add-node-form {
+    padding: 8px;
+}
+
+.form-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.form-header-icon {
+    font-size: 2em;
+    color: var(--accent-blue);
+    margin-top: 4px;
+}
+
+.form-header h4 {
+    margin: 0 0 4px 0;
+    font-size: 1.2em;
+}
+
+.form-desc {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+.form-body {
+    padding: 0 8px;
+}
+
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    font-size: 0.9em;
+    color: var(--text-secondary);
+}
+
+.form-group label i {
+    margin-right: 6px;
+    width: 16px;
+    text-align: center;
+}
+
+.form-group .required {
+    color: var(--accent-red);
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.95em;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.1);
+}
+
+.form-group input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-lg {
+    padding: 10px 24px;
+    font-size: 0.95em;
+}
+
+/* Token 生成结果卡片 */
+.token-success-card {
+    background: var(--bg-card);
+    border: 1px solid var(--accent-green);
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+    animation: fadeIn 0.3s ease;
+}
+
+.token-success-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    color: var(--accent-green);
+    font-size: 1.05em;
+    margin-bottom: 16px;
+}
+
+.token-success-header i {
+    font-size: 1.4em;
+}
+
+.token-section {
+    margin-bottom: 16px;
+}
+
+.token-section label {
+    display: block;
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.token-section label small {
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.copy-box {
+    position: relative;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px 80px 12px 14px;
+    overflow-x: auto;
+}
+
+.copy-box code,
+.copy-box pre {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 0.85em;
+    color: var(--accent-green);
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+}
+
+.copy-box .btn-copy {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    padding: 4px 10px;
+    font-size: 0.75em;
+}
+
+.btn-xs {
+    padding: 4px 8px;
+    font-size: 0.75em;
+}
+
+.btn-copy.copied {
+    background: var(--accent-green) !important;
+    color: #fff !important;
+    border-color: var(--accent-green) !important;
+}
+
+.token-meta {
+    display: flex;
+    gap: 20px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+
+.token-meta code {
+    background: var(--bg-primary);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+/* Token 生成错误 */
+.token-error {
+    background: rgba(239, 83, 80, 0.1);
+    border: 1px solid var(--accent-red);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-top: 16px;
+    color: var(--accent-red);
+    font-size: 0.9em;
+}
+
+.token-error i {
+    margin-right: 8px;
+}
+
+/* 节点统计卡片 */
+.node-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.node-stat-card {
+    flex: 1;
+    min-width: 120px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+}
+
+.node-stat-card .stat-value {
+    font-size: 1.8em;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.node-stat-card .stat-label {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+
+.node-stat-card.stat-online .stat-value { color: var(--accent-green); }
+.node-stat-card.stat-pending .stat-value { color: var(--accent-orange); }
+.node-stat-card.stat-offline .stat-value { color: var(--accent-red); }
+.node-stat-card.stat-total .stat-value { color: var(--accent-blue); }
+
+/* 节点表格美化 */
+.node-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.node-table th {
+    background: var(--bg-primary);
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.node-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.node-table tbody tr:nth-child(even) {
+    background: rgba(255,255,255,0.02);
+}
+
+.node-table tbody tr:hover {
+    background: rgba(79, 195, 247, 0.06);
+}
+
+/* 节点管理面板工具栏 */
+.node-mgmt-panel .node-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.node-panel-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.node-panel-actions select {
+    padding: 5px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.8em;
+}
+
+/* fadeIn 动画 */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* === Token 表格 === */
+.token-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+}
+
+.token-table th, .token-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color, #2a3a4a);
+}
+
+.token-table th {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.token-table code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9em;
+    color: var(--accent-blue);
+}
+
+.token-table .row-used { opacity: 0.5; }
+.token-table .row-expired { opacity: 0.4; }
+
+.btn-xs { padding: 3px 8px; font-size: 0.75em; border-radius: 4px; }
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.status-badge.pending { background: rgba(79,195,247,0.15); color: var(--accent-blue); }
+.status-badge.approved { background: rgba(102,187,106,0.15); color: var(--accent-green); }
+.status-badge.expired { background: rgba(239,83,80,0.1); color: var(--accent-red); }
+
+.role-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    font-weight: 600;
+}
+
+.role-badge.hq { background: rgba(171,71,188,0.15); color: #ab47bc; }
+.role-badge.branch { background: rgba(79,195,247,0.15); color: var(--accent-blue); }
+
+.no-tokens {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 20px;
+    font-style: italic;
+}
+
+.text-muted { color: var(--text-secondary); opacity: 0.5; }
+
+.token-section { margin-top: 24px; }
+.token-section h3 {
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+    font-size: 0.95em;
+}
