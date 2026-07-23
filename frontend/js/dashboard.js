@@ -118,7 +118,7 @@ function closeModal() {
 function showPeerDetail(peer) {
     const html = `
         <div class="detail-grid">
-            <div class="detail-item"><span class="label">名称</span><span class="value">${escHtml(peer.name)}</span></div>
+            <div class="detail-item"><span class="label">名称</span><span class="value">${escHtml(peer.display_name || peer.name)}</span></div>
             <div class="detail-item"><span class="label">状态</span><span class="value">${peer.status === 'online' ? '🟢 在线' : '🔴 离线'}</span></div>
             <div class="detail-item"><span class="label">接口</span><span class="value">${peer.interface}</span></div>
             <div class="detail-item"><span class="label">Endpoint</span><span class="value">${peer.endpoint || '-'}</span></div>
@@ -143,7 +143,7 @@ function showBranchDetail(br) {
 
     const html = `
         <div class="detail-grid">
-            <div class="detail-item"><span class="label">分支 ID</span><span class="value">${escHtml(br.branch_id)}</span></div>
+            <div class="detail-item"><span class="label">分支 ID</span><span class="value">${escHtml(br.display_name || br.hostname || br.branch_id)}</span></div>
             <div class="detail-item"><span class="label">状态</span><span class="value">${br.stale ? '🟡 中断' : '🟢 正常'}</span></div>
             <div class="detail-item"><span class="label">CPU</span><span class="value">${br.cpu_percent?.toFixed(1) || '-'}%</span></div>
             <div class="detail-item"><span class="label">内存</span><span class="value">${br.memory_percent?.toFixed(1) || '-'}%</span></div>
@@ -265,7 +265,7 @@ function renderPeerGrid() {
         return `
         <div class="peer-card ${statusClass} ${animClass}" data-peer='${escAttr(JSON.stringify(peer))}'>
             <div class="card-header">
-                <span class="name"><i class="fas fa-globe"></i> ${escHtml(peer.name)}</span>
+                <span class="name"><i class="fas fa-globe"></i> ${escHtml(peer.display_name || peer.name)}</span>
                 <span class="status ${statusClass}">${peer.status === 'online' ? 'CONNECTED' : 'DISCONNECTED'}</span>
             </div>
             <div class="card-metrics">
@@ -314,7 +314,7 @@ function renderBranchGrid() {
         return `
         <div class="branch-card ${statusClass}" data-branch='${escAttr(JSON.stringify(br))}'>
             <div class="card-header">
-                <span class="name"><i class="fas fa-building"></i> ${escHtml(br.branch_id)}</span>
+                <span class="name"><i class="fas fa-building"></i> ${escHtml(br.display_name || br.hostname || br.branch_id)}</span>
                 <span class="status ${statusClass}">${statusLabel}</span>
             </div>
             <div class="card-metrics">
@@ -1203,11 +1203,12 @@ function renderNodeTable() {
             actions += '<button class="btn btn-xs btn-reject" onclick="nodeAction(\'reject\',\'' + escAttr(node.node_id) + '\')"><i class="fas fa-times"></i></button> ';
         } else if (node.status === 'approved') {
             actions += '<button class="btn btn-xs btn-config" onclick="showNodeConfig(\'' + escAttr(node.node_id) + '\')"><i class="fas fa-cog"></i></button> ';
+            actions += '<button class="btn btn-xs" style="background:var(--accent-blue);color:#fff;border:none" onclick="renameNode(\'' + escAttr(node.node_id) + '\',\'' + escAttr(node.display_name || node.hostname || '') + '\')"><i class="fas fa-pen"></i></button> ';
         }
         actions += '<button class="btn btn-xs btn-delete" onclick="nodeAction(\'delete\',\'' + escAttr(node.node_id) + '\')"><i class="fas fa-trash"></i></button>';
 
         return '<tr>' +
-            '<td class="td-hostname" title="' + escAttr(node.node_id) + '">' + escHtml(node.hostname || node.node_id) + '</td>' +
+            '<td class="td-hostname" title="' + escAttr(node.node_id) + '">' + escHtml(node.display_name || node.hostname || node.node_id) + '</td>' +
             '<td>' + roleBadge + '</td>' +
             '<td class="td-ip">' + escHtml(node.ip || '-') + '</td>' +
             '<td>' + escHtml(node.version || '-') + '</td>' +
@@ -1350,4 +1351,24 @@ function formatShortDate(unixTs) {
     const hh = String(d.getHours()).padStart(2, '0');
     const min = String(d.getMinutes()).padStart(2, '0');
     return mm + '-' + dd + ' ' + hh + ':' + min;
+}
+
+async function renameNode(nodeId, currentName) {
+    const newName = prompt('设置节点显示名称:', currentName);
+    if (newName === null || newName.trim() === '') return;
+    try {
+        const resp = await fetch('/api/nodes/' + nodeId + '/rename', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({display_name: newName.trim()}),
+        });
+        if (resp.ok) {
+            fetchNodes();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            alert('重命名失败: ' + (err.error || 'HTTP ' + resp.status));
+        }
+    } catch(e) {
+        alert('请求失败: ' + e.message);
+    }
 }

@@ -275,7 +275,7 @@ def write_status_files():
         enriched_peers.append({
             'interface': p.get('interface', ''),
             'peer': peer_key,
-            'name': peer_key if peer_key else 'unknown',
+            'name': _resolve_peer_display_name(peer_key),
             'branch_id': '',
             'status': 'online' if is_online else 'offline',
             'endpoint': p.get('endpoint', ''),
@@ -356,6 +356,7 @@ def write_status_files():
         branches.append({
             'branch_id': bid,
             'hostname': bstate.get('hostname', bid),
+            'display_name': node_info.get('display_name', '') if node_info else '',
             'reported_at': report_ts,
             'last_seen': report_ts,
             'online': now - report_ts < 60,
@@ -549,6 +550,9 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.handle_register()
         elif path == '/report':
             self.handle_report()
+        elif path.startswith('/api/nodes/') and path.endswith('/rename'):
+            node_id = path.split('/')[3]
+            self.handle_rename_node(node_id)
         elif path.startswith('/api/nodes/') and path.endswith('/approve'):
             node_id = path.split('/')[3]
             self.handle_approve(node_id)
@@ -935,6 +939,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     'node_id': info['node_id'],
                     'role': info.get('role', ''),
                     'hostname': info.get('hostname', ''),
+                    'display_name': info.get('display_name', ''),
                     'ip': info.get('ip', ''),
                     'status': info.get('status', 'pending'),
                     'version': info.get('version', ''),
@@ -965,6 +970,31 @@ class ApiHandler(BaseHTTPRequestHandler):
             nodes[node_id].setdefault('pending_config', {})['status'] = 'rejected'
             save_nodes()
         self.send_json(200, {'status': 'rejected', 'node_id': node_id})
+
+    def handle_rename_node(self, node_id):
+        """POST /api/nodes/{id}/rename — 设置节点自定义显示名称"""
+        body = self.read_body()
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_json(400, {'error': 'invalid JSON'})
+            return
+
+        display_name = payload.get('display_name', '').strip()
+        if not display_name:
+            self.send_json(400, {'error': 'display_name is required'})
+            return
+
+        with state_lock:
+            load_nodes()
+            if node_id not in nodes:
+                self.send_json(404, {'error': 'node not found'})
+                return
+            nodes[node_id]['display_name'] = display_name
+            save_nodes()
+
+        print(f'[NODE] Renamed {node_id} → "{display_name}"')
+        self.send_json(200, {'status': 'ok', 'node_id': node_id, 'display_name': display_name})
 
     def handle_delete_node(self, node_id):
         with state_lock:
