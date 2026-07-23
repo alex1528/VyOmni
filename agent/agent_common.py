@@ -19,7 +19,7 @@ import socket
 import shutil
 
 # === 常量 ===
-AGENT_VERSION = '2.1.1'
+AGENT_VERSION = '2.1.2'
 CREDENTIAL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.credentials.json')
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.conf')
 UPGRADE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.upgrades')

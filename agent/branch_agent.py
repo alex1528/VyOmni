@@ -39,6 +39,32 @@ def collect_interfaces():
     return interfaces
 
 
+def collect_wg_peers():
+    """采集本节点 WireGuard peers 的 allowed_ips（分支自身视角）"""
+    import subprocess
+    peers_info = []
+    try:
+        result = subprocess.run(
+            ['wg', 'show', 'all', 'dump'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return peers_info
+
+        for line in result.stdout.strip().split('\n'):
+            fields = line.split('\t')
+            # peer 行有 9 个字段
+            if len(fields) >= 8 and fields[3] != '(none)':
+                peers_info.append({
+                    'peer_key': fields[1],
+                    'endpoint': fields[3],
+                    'allowed_ips': fields[4],
+                })
+    except Exception:
+        pass
+    return peers_info
+
+
 def main():
     print(f'[INFO] VyOmni Branch Agent v{AGENT_VERSION} starting...')
 
@@ -78,6 +104,11 @@ def main():
 
             if 'interfaces' in caps:
                 payload['interfaces'] = collect_interfaces()
+
+            # 采集本节点 wg peers 信息（allowed_ips）
+            wg_peers = collect_wg_peers()
+            if wg_peers:
+                payload['wg_peers'] = wg_peers
 
             # 上报
             response = report_data(config, credentials, payload)

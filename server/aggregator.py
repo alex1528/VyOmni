@@ -241,6 +241,23 @@ def verify_signature(body_bytes, ts_str, sig_str, hmac_key):
 
 
 # === 状态文件写入（兼容旧版前端） ===
+def _get_branch_allowed_ips(bstate, peer_endpoint_map, node_info):
+    """
+    获取分支节点的 Allowed IPs（仅使用分支自身上报数据）
+    来源：分支自己 wg show all dump 中看到的 peers 的 allowed_ips
+    """
+    wg_peers = bstate.get('wg_peers', [])
+    if wg_peers:
+        all_allowed = []
+        for wp in wg_peers:
+            ips = wp.get('allowed_ips', '')
+            if ips:
+                all_allowed.append(ips)
+        if all_allowed:
+            return '; '.join(all_allowed)
+    return ''
+
+
 def _resolve_branch_display_name(node_info, peer_endpoint_map):
     """
     查找分支节点的显示别名
@@ -421,7 +438,7 @@ def write_status_files():
             # IP 地理位置
             'geo': node_info.get('geo', None),
             # 从 HQ peers 关联的 allowed_ips
-            'allowed_ips': peer_endpoint_map.get(node_info.get('ip', ''), {}).get('allowed_ips', '') if node_info else '',
+            'allowed_ips': _get_branch_allowed_ips(bstate, peer_endpoint_map, node_info),
         })
 
     branch_data = {
