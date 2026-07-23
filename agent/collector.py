@@ -19,6 +19,26 @@ from agent_common import (
 )
 
 
+def collect_interfaces():
+    """采集所有 eth*/wg* 网卡流量（与 branch_agent 同款逻辑）"""
+    interfaces = {}
+    try:
+        with open('/proc/net/dev') as f:
+            lines = f.readlines()[2:]
+        for line in lines:
+            parts = line.split()
+            iface = parts[0].rstrip(':')
+            if not (iface.startswith('eth') or iface.startswith('wg')):
+                continue
+            interfaces[iface] = {
+                'rx_bytes': int(parts[1]),
+                'tx_bytes': int(parts[9]),
+            }
+    except Exception:
+        pass
+    return interfaces
+
+
 def collect_wg_dump():
     """采集 wg show all dump"""
     try:
@@ -88,6 +108,9 @@ def main():
 
             if 'wireguard' in caps:
                 payload['peers'] = collect_wg_dump()
+
+            # 总部所有 eth*/wg* 网卡流量
+            payload['interfaces'] = collect_interfaces()
 
             # 上报
             response = report_data(config, credentials, payload)

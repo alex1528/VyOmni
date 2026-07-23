@@ -1284,3 +1284,19 @@ body {
         height: 350px;
     }
 }
+
+/* === 总部资源卡片 === */
+.hq-resource-card .hq-card {
+    border-left: 3px solid var(--accent-blue, #4fc3f7);
+}
+
+.hq-card .card-header .name i {
+    color: #ffd700;
+}
+
+.bar-title {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+}

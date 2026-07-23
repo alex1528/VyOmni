@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VyOmni 网络监控看板</title>
     <link rel="stylesheet" href="assets/fontawesome/css/all.min.css">
-    <link rel="stylesheet" href="css/dashboard.css?v=1784797187">
+    <link rel="stylesheet" href="css/dashboard.css?v=1784798391">
 </head>
 <body>
     <!-- 顶部全局状态栏 -->
@@ -18,21 +18,7 @@
             <span id="hostname">加载中...</span>
         </div>
         <div class="bar-center">
-            <div class="stat-item">
-                <i class="fas fa-microchip"></i>
-                <span>CPU</span>
-                <strong id="global-cpu">--%</strong>
-            </div>
-            <div class="stat-item">
-                <i class="fas fa-memory"></i>
-                <span>内存</span>
-                <strong id="global-mem">--%</strong>
-            </div>
-            <div class="stat-item">
-                <i class="fas fa-link"></i>
-                <span>隧道</span>
-                <strong id="global-tunnel">- / -</strong>
-            </div>
+            <span class="bar-title">VyOmni Monitor</span>
         </div>
         <div class="bar-right">
             <span class="update-time">
@@ -52,6 +38,12 @@
     </header>
 
     <main class="dashboard">
+        <!-- 总部资源 -->
+        <section class="section">
+            <h2><i class="fas fa-server"></i> 总部资源</h2>
+            <div class="hq-resource-card" id="hq-resource"></div>
+        </section>
+
         <!-- 维度1：Peer 隧道状态矩阵 -->
         <section class="section">
             <h2><i class="fas fa-shield-alt"></i> 隧道状态（维度1）</h2>
@@ -130,7 +122,7 @@
     </audio>
 
     <!-- 离线 JS -->
-    <script src="assets/echarts.min.js?v=1784797187"></script>
-    <script src="js/dashboard.js?v=1784797187"></script>
+    <script src="assets/echarts.min.js?v=1784798391"></script>
+    <script src="js/dashboard.js?v=1784798391"></script>
 </body>
 </html>

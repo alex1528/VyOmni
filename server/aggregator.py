@@ -79,6 +79,7 @@ def save_peer_aliases():
         json.dump(peer_aliases, f, indent=2, ensure_ascii=False)
 
 prev_branch_interfaces = {}  # {branch_id: {iface: {'rx': bytes, 'tx': bytes}}}
+prev_hq_interfaces = {}  # {iface: {'rx': bytes, 'tx': bytes}}
 prev_report_time = 0
 branch_states = {}  # branch_id -> 最近一次分支上报
 upgrade_info = None  # 当前可用升级信息
@@ -379,7 +380,42 @@ def write_status_files():
     tunnel_data['system']['tunnel_active'] = active_count
     tunnel_data['system']['tunnel_total'] = len(raw_peers)
 
-    with open(os.path.join(DATA_DIR, 'status-tunnel.json'), 'w') as f:
+    
+    # === 总部资源（网卡速率差值计算）===
+    global prev_hq_interfaces
+    hq_raw_ifaces = hq_state.get('interfaces', {})
+    hq_enriched_ifaces = {}
+    for iface, idata in hq_raw_ifaces.items():
+        rx_bytes = idata.get('rx_bytes', 0)
+        tx_bytes = idata.get('tx_bytes', 0)
+        rx_rate = 0.0
+        tx_rate = 0.0
+        if iface in prev_hq_interfaces and dt > 0:
+            prev = prev_hq_interfaces[iface]
+            delta_rx = rx_bytes - prev.get('rx', 0)
+            delta_tx = tx_bytes - prev.get('tx', 0)
+            if delta_rx >= 0 and delta_tx >= 0:
+                rx_rate = round(delta_rx * 8 / dt / 1_000_000, 3)
+                tx_rate = round(delta_tx * 8 / dt / 1_000_000, 3)
+        hq_enriched_ifaces[iface] = {'rx_mbps': rx_rate, 'tx_mbps': tx_rate}
+
+    if report_time > prev_report_time or not prev_hq_interfaces:
+        prev_hq_interfaces = {
+            iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
+            for iface, idata in hq_raw_ifaces.items()
+        }
+
+    hq_sys = hq_state.get('system', {})
+    tunnel_data['hq_resource'] = {
+        'hostname': hq_state.get('hostname', 'Unknown'),
+        'cpu_percent': hq_sys.get('cpu_percent', 0),
+        'memory_percent': hq_sys.get('memory_percent', 0),
+        'tunnel_active': active_count,
+        'tunnel_total': len(raw_peers),
+        'interfaces': hq_enriched_ifaces,
+    }
+
+with open(os.path.join(DATA_DIR, 'status-tunnel.json'), 'w') as f:
         json.dump(tunnel_data, f, indent=2)
 
     # status-branches.json — 仅包含 approved 节点

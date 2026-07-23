@@ -243,11 +243,43 @@ function renderGlobalBar() {
     if (!tunnelData) return;
     const sys = tunnelData.system;
     document.getElementById('hostname').textContent = sys.hostname || 'Unknown';
-    document.getElementById('global-cpu').textContent = sys.cpu_percent.toFixed(1) + '%';
-    document.getElementById('global-mem').textContent = sys.memory_percent.toFixed(1) + '%';
-    document.getElementById('global-tunnel').textContent = `${sys.tunnel_active} / ${sys.tunnel_total}`;
     document.getElementById('last-update').textContent = formatTime(tunnelData.updated_at);
 }
+
+function renderHqResource() {
+    if (!tunnelData || !tunnelData.hq_resource) return;
+    const hq = tunnelData.hq_resource;
+    const el = document.getElementById('hq-resource');
+    if (!el) return;
+
+    // 网卡流量列表（按名称排序）
+    let ifaceHtml = '';
+    if (hq.interfaces) {
+        const sorted = Object.entries(hq.interfaces).sort(([a], [b]) => a.localeCompare(b));
+        ifaceHtml = sorted.map(([iface, data]) => {
+            const rx = formatRate(data.rx_mbps);
+            const tx = formatRate(data.tx_mbps);
+            return '<div class="iface-row"><span class="iface-name">' + iface + '</span><span class="iface-rate">↓' + rx + ' ↑' + tx + '</span></div>';
+        }).join('');
+    }
+
+    el.innerHTML = `
+    <div class="branch-card active hq-card">
+        <div class="card-header">
+            <span class="name"><i class="fas fa-crown"></i> ${escHtml(hq.hostname)}</span>
+            <span class="status active">总部在线</span>
+        </div>
+        <div class="card-metrics">
+            <div class="metric"><span class="label">CPU</span><span class="value">${hq.cpu_percent?.toFixed(1) || '0'}%</span></div>
+            <div class="metric"><span class="label">内存</span><span class="value">${hq.memory_percent?.toFixed(1) || '0'}%</span></div>
+            <div class="metric"><span class="label">隧道</span><span class="value">${hq.tunnel_active || 0} / ${hq.tunnel_total || 0}</span></div>
+            <div class="metric"><span class="label">更新</span><span class="value">${formatTime(tunnelData.updated_at)}</span></div>
+            ${ifaceHtml}
+        </div>
+    </div>`;
+}
+
+
 
 function renderPeerGrid() {
     if (!tunnelData) return;
