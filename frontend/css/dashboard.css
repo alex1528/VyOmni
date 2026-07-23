@@ -1125,3 +1125,41 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* === 节点表格列宽固定+防换行 === */
+.node-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.node-table .td-hostname {
+    width: 30%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.node-table .td-date {
+    width: 15%;
+    white-space: nowrap;
+    font-size: 0.8em;
+}
+
+.node-table .td-actions {
+    width: 18%;
+    white-space: nowrap;
+}
+
+.node-table td, .node-table th {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 操作按钮紧凑化 */
+.btn-approve { background: var(--accent-green); color: #fff; border: none; }
+.btn-reject { background: var(--accent-orange, #ffa726); color: #fff; border: none; }
+.btn-config { background: var(--accent-blue); color: #fff; border: none; }
+.btn-delete { background: var(--accent-red); color: #fff; border: none; }
+.btn-xs { padding: 3px 6px; font-size: 0.75em; border-radius: 3px; cursor: pointer; }
+.btn-xs + .btn-xs { margin-left: 3px; }

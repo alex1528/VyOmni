@@ -815,13 +815,9 @@ function getNodePanelHtml() {
             <table class="node-table" id="node-table">
                 <thead>
                     <tr>
-                        <th>节点 ID</th>
                         <th>主机名</th>
                         <th>角色</th>
-                        <th>IP</th>
-                        <th>版本</th>
                         <th>状态</th>
-                        <th>上报间隔</th>
                         <th>最后在线</th>
                         <th>注册时间</th>
                         <th>操作</th>
@@ -1188,47 +1184,32 @@ function renderNodeTable() {
     const now = Math.floor(Date.now() / 1000);
 
     tbody.innerHTML = filtered.map(node => {
-        const isOnline = node.status === 'approved' && now - node.last_seen < 60;
+        const now2 = Math.floor(Date.now() / 1000);
+        const isOnline = node.status === 'approved' && now2 - node.last_seen < 60;
         const statusBadge = getNodeStatusBadge(node.status);
         const roleBadge = node.role === 'hq'
             ? '<span class="role-badge hq">HQ</span>'
             : '<span class="role-badge branch">Branch</span>';
         const lastSeen = node.last_seen ? formatTimeAgo(now - node.last_seen) : '从未';
-        const regTime = node.registered_at ? formatDateTime(node.registered_at) : '-';
+        const regTime = node.registered_at ? formatShortDate(node.registered_at) : '-';
 
         let actions = '';
         if (node.status === 'pending') {
-            actions = `
-                <button class="btn btn-xs btn-approve" onclick="nodeAction('approve','${escAttr(node.node_id)}')">
-                    <i class="fas fa-check"></i> 通过
-                </button>
-                <button class="btn btn-xs btn-reject" onclick="nodeAction('reject','${escAttr(node.node_id)}')">
-                    <i class="fas fa-times"></i> 拒绝
-                </button>`;
+            actions += '<button class="btn btn-xs btn-approve" onclick="nodeAction(\'approve\',\'' + escAttr(node.node_id) + '\')"><i class="fas fa-check"></i></button> ';
+            actions += '<button class="btn btn-xs btn-reject" onclick="nodeAction(\'reject\',\'' + escAttr(node.node_id) + '\')"><i class="fas fa-times"></i></button> ';
         } else if (node.status === 'approved') {
-            actions = `
-                <button class="btn btn-xs btn-config" onclick="showNodeConfig('${escAttr(node.node_id)}')">
-                    <i class="fas fa-cog"></i> 配置
-                </button>`;
+            actions += '<button class="btn btn-xs btn-config" onclick="showNodeConfig(\'' + escAttr(node.node_id) + '\')"><i class="fas fa-cog"></i></button> ';
         }
-        actions += `
-            <button class="btn btn-xs btn-delete" onclick="nodeAction('delete','${escAttr(node.node_id)}')">
-                <i class="fas fa-trash"></i>
-            </button>`;
+        actions += '<button class="btn btn-xs btn-delete" onclick="nodeAction(\'delete\',\'' + escAttr(node.node_id) + '\')"><i class="fas fa-trash"></i></button>';
 
-        return `
-        <tr class="${isOnline ? 'row-online' : ''} ${node.status === 'pending' ? 'row-pending' : ''}">
-            <td class="node-id-cell" title="${escAttr(node.node_id)}">${escHtml(node.node_id.length > 20 ? node.node_id.slice(0,20)+'...' : node.node_id)}</td>
-            <td>${escHtml(node.hostname)}</td>
-            <td>${roleBadge}</td>
-            <td><code>${escHtml(node.ip)}</code></td>
-            <td><code>${escHtml(node.version || '-')}</code></td>
-            <td>${statusBadge}</td>
-            <td>${node.report_interval}s</td>
-            <td>${lastSeen}</td>
-            <td>${regTime}</td>
-            <td class="actions-cell">${actions}</td>
-        </tr>`;
+        return '<tr>' +
+            '<td class="td-hostname" title="' + escAttr(node.node_id) + '">' + escHtml(node.hostname || node.node_id) + '</td>' +
+            '<td>' + roleBadge + '</td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td>' + lastSeen + '</td>' +
+            '<td class="td-date">' + regTime + '</td>' +
+            '<td class="td-actions">' + actions + '</td>' +
+            '</tr>';
     }).join('');
 }
 
@@ -1353,4 +1334,14 @@ async function deleteToken(tokenId) {
     } catch (e) {
         alert('请求失败: ' + e.message);
     }
+}
+
+function formatShortDate(unixTs) {
+    if (!unixTs) return '-';
+    const d = new Date(unixTs * 1000);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return mm + '-' + dd + ' ' + hh + ':' + min;
 }
