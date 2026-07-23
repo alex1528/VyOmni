@@ -81,9 +81,39 @@ def save_tokens():
 
 
 def load_upgrade_info():
-    """加载升级信息"""
+    """
+    加载升级信息
+    优先从 /app/agent/agent_common.py 自动读取 AGENT_VERSION
+    这样 git pull + docker rebuild 后自动成为全网升级目标
+    """
     global upgrade_info
-    info_path = os.path.join(UPGRADE_DIR, 'latest.json')
+
+    # 方式1：自动从 Agent 文件读取最新版本
+    agent_common_path = os.path.join(AGENT_FILES_DIR, 'agent_common.py')
+    if os.path.exists(agent_common_path):
+        try:
+            with open(agent_common_path, 'r') as f:
+                content = f.read()
+            # 解析 AGENT_VERSION = 'x.x.x'
+            import re as _re
+            match = _re.search(r"AGENT_VERSION\s*=\s*['\"](.*?)['\"", content)
+            if match:
+                latest_version = match.group(1)
+                # 计算 agent_common.py 的 SHA256
+                with open(agent_common_path, 'rb') as f:
+                    sha256 = hashlib.sha256(f.read()).hexdigest()
+                upgrade_info = {
+                    'version': latest_version,
+                    'sha256': sha256,
+                    'source': 'auto',
+                }
+                print(f'[UPGRADE] 自动检测最新 Agent 版本: {latest_version}')
+                return
+        except Exception as e:
+            print(f'[WARN] 自动读取 Agent 版本失败: {e}')
+
+    # 方式2：从手动上传的 latest.json 读取（兼容旧方式）
+    info_path = os.path.join(DATA_DIR, '.upgrades', 'latest.json')
     if os.path.exists(info_path):
         try:
             with open(info_path) as f:

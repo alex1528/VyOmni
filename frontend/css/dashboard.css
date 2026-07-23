@@ -1128,7 +1128,7 @@ body {
 
 /* === 节点表格列宽固定+防换行 === */
 .node-table {
-    table-layout: fixed;
+    table-layout: auto;
     width: 100%;
 }
 
@@ -1152,6 +1152,10 @@ body {
 
 .node-table td, .node-table th {
     white-space: nowrap;
+}
+
+.node-table .td-hostname {
+    max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -1167,6 +1171,7 @@ body {
 .node-table .td-ip {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.82em;
-    min-width: 120px;
+    min-width: 140px;
     white-space: nowrap;
+    overflow: visible;
 }
