@@ -206,9 +206,16 @@ async function fetchJSON(url) {
     try {
         const resp = await fetch(url, { cache: 'no-store' });
         if (!resp.ok) return null;
-        return await resp.json();
+        const ct = resp.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+            console.warn(`[VyOmni] ${url} 返回非JSON (${ct}), 跳过`);
+            return null;
+        }
+        const text = await resp.text();
+        if (!text || !text.trim()) return null;
+        return JSON.parse(text);
     } catch (e) {
-        console.error(`Fetch ${url} 失败:`, e);
+        console.warn(`[VyOmni] Fetch ${url}:`, e.message);
         return null;
     }
 }
