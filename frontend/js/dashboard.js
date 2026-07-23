@@ -378,7 +378,7 @@ function addAlert(level, message) {
     if (alerts.length > 50) alerts.pop();
     renderAlerts();
     if (level === 'critical' && ALERT_SOUND_ENABLED) {
-        try { document.getElementById('alert-sound').play(); } catch(e) {}
+        try { document.getElementById('alert-sound').play().catch(()=>{}); } catch(e) {}
     }
 }
 
@@ -1016,6 +1016,7 @@ function renderTokenList() {
                     canDelete = true;
                 } else if (tk.status === 'used') {
                     statusBadge = '<span class="status-badge approved"><i class="fas fa-check-circle"></i> 已使用</span>';
+                    canDelete = true;
                 } else {
                     statusBadge = '<span class="status-badge expired"><i class="fas fa-times-circle"></i> 已过期</span>';
                     canDelete = true;
