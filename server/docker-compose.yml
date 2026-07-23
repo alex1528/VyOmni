@@ -5,8 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: vyomni-aggregator
     command: python3 -u aggregator.py
-    ports:
-      - "9100:9100"
+    # 不对外暴露，仅通过 nginx 代理访问
+    expose:
+      - "9100"
     volumes:
       - shared-data:/data
       - ./config.json:/app/config.json:ro

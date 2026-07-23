@@ -29,7 +29,7 @@ UPGRADE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.upgrade
 def load_config():
     """加载极简配置文件（server_url + register_token）"""
     config = {
-        'server_url': 'http://192.168.1.100:9100',
+        'server_url': 'http://192.168.1.100:8080',
         'register_token': 'vyomni-2025',
     }
     if os.path.exists(CONFIG_PATH):
