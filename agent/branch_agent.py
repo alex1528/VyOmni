@@ -19,7 +19,7 @@ from agent_common import (
 
 
 def collect_interfaces():
-    """采集网络接口流量"""
+    """采集网络接口流量（仅匹配 eth* 和 wg* 开头的接口）"""
     interfaces = {}
     try:
         with open('/proc/net/dev') as f:
@@ -27,7 +27,8 @@ def collect_interfaces():
         for line in lines:
             parts = line.split()
             iface = parts[0].rstrip(':')
-            if iface in ('lo',):
+            # 仅采集 eth 和 wg 开头的接口
+            if not (iface.startswith('eth') or iface.startswith('wg')):
                 continue
             interfaces[iface] = {
                 'rx_bytes': int(parts[1]),
