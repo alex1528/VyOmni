@@ -121,7 +121,7 @@ def load_upgrade_info():
                 content = f.read()
             # 解析 AGENT_VERSION = 'x.x.x'
             import re as _re
-            match = _re.search(r"AGENT_VERSION\s*=\s*['\"](.*?)['\"", content)
+            match = _re.search(r"AGENT_VERSION\s*=\s*['\"](.+?)['\"]", content)
             if match:
                 latest_version = match.group(1)
                 # 计算 agent_common.py 的 SHA256
@@ -275,7 +275,7 @@ def write_status_files():
         enriched_peers.append({
             'interface': p.get('interface', ''),
             'peer': peer_key,
-            'name': _resolve_peer_display_name(peer_key),
+            'name': peer_key[:16] + '...' if len(peer_key) > 16 else (peer_key or 'unknown'),
             'branch_id': '',
             'status': 'online' if is_online else 'offline',
             'endpoint': p.get('endpoint', ''),
