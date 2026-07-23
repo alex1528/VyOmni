@@ -737,12 +737,19 @@ function updateMap() {
             geo: {
                 map: 'china',
                 roam: true,
-                zoom: 1.2,
+                zoom: 1.5,
+                scaleLimit: { min: 0.8, max: 8 },
                 itemStyle: {
                     areaColor: 'var(--bg-card, #1e2d3d)',
                     borderColor: 'var(--border-color, #3a4a5a)',
-                    borderWidth: 0.5,
+                    borderWidth: 1,
+                    borderType: 'dashed',
                 },
+                emphasis: {
+                    itemStyle: { areaColor: 'rgba(79,195,247,0.1)' },
+                    label: { show: true, color: 'var(--text-secondary, #9aa0a6)', fontSize: 10 }
+                },
+                label: { show: false },
                 emphasis: {
                     itemStyle: { areaColor: '#2a3a4a' },
                     label: { show: false }

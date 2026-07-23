@@ -1256,3 +1256,31 @@ body {
     font-size: 0.9em;
     text-align: right;
 }
+
+/* === 拓扑 + 地图并排一行 === */
+.topo-map-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.topo-map-row .topo-half,
+.topo-map-row .map-half {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.chart-half-height {
+    width: 100%;
+    height: 400px;
+}
+
+@media (max-width: 1024px) {
+    .topo-map-row {
+        flex-direction: column;
+    }
+    .chart-half-height {
+        height: 350px;
+    }
+}

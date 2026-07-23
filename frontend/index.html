@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VyOmni 网络监控看板</title>
     <link rel="stylesheet" href="assets/fontawesome/css/all.min.css">
-    <link rel="stylesheet" href="css/dashboard.css?v=1784796025">
+    <link rel="stylesheet" href="css/dashboard.css?v=1784796482">
 </head>
 <body>
     <!-- 顶部全局状态栏 -->
@@ -64,21 +64,21 @@
             <div class="branch-grid" id="branch-grid"></div>
         </section>
 
-        <!-- 网络拓扑可视化 -->
-        <section class="section">
-            <h2><i class="fas fa-project-diagram"></i> 网络拓扑</h2>
-            <div class="chart-panel topology-panel">
-                <div id="chart-topology" class="chart chart-large"></div>
-            </div>
-        </section>
-
-        <!-- 分支地图可视化 -->
-        <section class="section">
-            <h2><i class="fas fa-map-marked-alt"></i> 分支地图</h2>
-            <div class="chart-panel map-panel">
-                <div id="chart-map" class="chart chart-large"></div>
-            </div>
-        </section>
+        <!-- 网络拓扑 + 分支地图（并排一行） -->
+        <div class="topo-map-row">
+            <section class="section topo-half">
+                <h2><i class="fas fa-project-diagram"></i> 网络拓扑</h2>
+                <div class="chart-panel topology-panel">
+                    <div id="chart-topology" class="chart chart-half-height"></div>
+                </div>
+            </section>
+            <section class="section map-half">
+                <h2><i class="fas fa-map-marked-alt"></i> 分支地图</h2>
+                <div class="chart-panel map-panel">
+                    <div id="chart-map" class="chart chart-half-height"></div>
+                </div>
+            </section>
+        </div>
 
         <!-- 趋势分析区 -->
         <section class="section">
@@ -130,7 +130,7 @@
     </audio>
 
     <!-- 离线 JS -->
-    <script src="assets/echarts.min.js?v=1784796025"></script>
-    <script src="js/dashboard.js?v=1784796025"></script>
+    <script src="assets/echarts.min.js?v=1784796482"></script>
+    <script src="js/dashboard.js?v=1784796482"></script>
 </body>
 </html>
