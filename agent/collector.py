@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from agent_common import (
     load_config, register_node, report_data, apply_dynamic_config,
-    check_and_upgrade, collect_system, AGENT_VERSION
+    check_and_upgrade, collect_system, get_local_ip, AGENT_VERSION
 )
 
 
@@ -80,6 +80,7 @@ def main():
                 'hostname': credentials['hostname'],
                 'timestamp': int(time.time()),
                 'version': AGENT_VERSION,
+                'ip': get_local_ip(),
             }
 
             if 'system' in caps:

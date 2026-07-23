@@ -80,64 +80,92 @@ def detect_role():
 
 # === 获取本机 IP ===
 def is_private_ip(ip):
-    """判断是否为私有网络地址"""
+    """判断是否为私有网络地址（含 CGNAT 100.64.0.0/10）"""
     import ipaddress
     try:
         addr = ipaddress.ip_address(ip)
-        return addr.is_private
+        # RFC1918 + loopback + link-local + CGNAT
+        return addr.is_private or addr.is_loopback or addr.is_link_local
     except Exception:
         return True
 
 
-def get_gateway_interface_ip():
-    """获取与默认网关一致的接口 IP"""
+def get_default_gateway_info():
+    """
+    获取默认网关接口名和该接口 IP
+    返回: (interface_name, interface_ip) 或 (None, None)
+    """
     try:
-        # Linux: 解析 /proc/net/route 获取默认网关对应接口
+        # 方法1：解析 /proc/net/route
         with open('/proc/net/route') as f:
             lines = f.readlines()[1:]
         default_iface = None
         for line in lines:
             parts = line.strip().split()
-            if len(parts) >= 3 and parts[1] == '00000000':  # 默认路由
+            # Destination == 0.0.0.0 且 Flags 包含 UG
+            if len(parts) >= 8 and parts[1] == '00000000' and int(parts[3], 16) & 0x2:
                 default_iface = parts[0]
                 break
 
         if not default_iface:
-            return None
+            # 方法2：ip route show default
+            result = subprocess.run(
+                ['ip', 'route', 'show', 'default'],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and 'dev' in result.stdout:
+                import re
+                m = re.search(r'dev\s+(\S+)', result.stdout)
+                if m:
+                    default_iface = m.group(1)
 
-        # 获取该接口的 IP（通过 ip addr 或 /proc）
+        if not default_iface:
+            return None, None
+
+        # 获取该接口的 IP
         result = subprocess.run(
-            ['ip', '-4', 'addr', 'show', 'dev', default_iface],
+            ['ip', '-4', '-o', 'addr', 'show', 'dev', default_iface],
             capture_output=True, text=True, timeout=5
         )
-        if result.returncode == 0:
+        if result.returncode == 0 and result.stdout.strip():
             import re
             match = re.search(r'inet\s+(\d+\.\d+\.\d+\.\d+)', result.stdout)
             if match:
-                return match.group(1)
+                return default_iface, match.group(1)
+
     except Exception:
         pass
-    return None
+    return None, None
 
 
 def get_public_ip():
-    """探测出口公网 IP（通过外部服务）"""
-    # 多个备选探测服务
+    """
+    探测出口公网 IP（通过多个外部服务，超时容忍）
+    返回公网 IP 字符串或 None
+    """
+    import ipaddress
+
     services = [
-        'http://ifconfig.me/ip',
+        'http://ifconfig.io/ip',
         'http://ip.sb',
         'http://ipecho.net/plain',
-        'http://checkip.amazonaws.com',
+        'http://api.ipify.org',
     ]
+
     for url in services:
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'curl/7.0'})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                ip = resp.read().decode().strip()
-                # 验证是合法 IP
-                import ipaddress
-                ipaddress.ip_address(ip)
-                return ip
+            req = urllib.request.Request(url, headers={
+                'User-Agent': 'curl/7.88.1',
+                'Accept': 'text/plain',
+            })
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                raw = resp.read().decode('utf-8', errors='ignore').strip()
+                # 有些服务返回额外内容，只取第一行
+                ip = raw.split('\n')[0].strip()
+                # 验证是合法公网 IP
+                addr = ipaddress.ip_address(ip)
+                if not addr.is_private:
+                    return ip
         except Exception:
             continue
     return None
@@ -146,25 +174,27 @@ def get_public_ip():
 def get_local_ip():
     """
     获取节点 IP 地址（智能探测）
-    优先级：
-    1. 获取默认网关接口 IP
-    2. 如果是私有地址 → 探测出口公网 IP
-    3. 返回格式：公网IP（如有）或 私有IP
+
+    逻辑：
+    1. 获取默认网关出口接口及其 IP
+    2. 如果接口 IP 是私有地址 → 探测出口公网 IP
+    3. 返回公网 IP（优先）或私有接口 IP（fallback）
     """
     # 步骤1：获取默认网关接口 IP
-    gateway_ip = get_gateway_interface_ip()
+    iface, gateway_ip = get_default_gateway_info()
 
     if not gateway_ip:
-        # fallback: socket 连接法
+        # fallback: UDP socket 连接法（不实际发包，仅获取出口 IP）
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(('8.8.8.8', 80))
+            s.settimeout(3)
+            s.connect(('223.5.5.5', 53))  # 阿里 DNS，国内可达
             gateway_ip = s.getsockname()[0]
             s.close()
         except Exception:
             gateway_ip = '0.0.0.0'
 
-    # 步骤2：如果是私有地址，探测公网 IP
+    # 步骤2：如果是私有地址，尝试探测出口公网 IP
     if is_private_ip(gateway_ip):
         public_ip = get_public_ip()
         if public_ip:

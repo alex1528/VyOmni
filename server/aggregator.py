@@ -871,6 +871,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             node_info['last_seen'] = int(time.time())
             if payload.get('version'):
                 node_info['version'] = payload['version']
+            if payload.get('ip'):
+                node_info['ip'] = payload['ip']
 
             if role == 'hq':
                 hq_state.update(payload)

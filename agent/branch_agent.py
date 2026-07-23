@@ -69,6 +69,7 @@ def main():
                 'branch_id': credentials['node_id'],  # 兼容旧版
                 'timestamp': int(time.time()),
                 'version': AGENT_VERSION,
+                'ip': get_local_ip(),
             }
 
             if 'system' in caps:
