@@ -172,19 +172,45 @@ def write_status_files():
     now = int(time.time())
 
     # status-tunnel.json
+    raw_peers = hq_state.get('peers', [])
+    enriched_peers = []
+    active_count = 0
+    for p in raw_peers:
+        handshake_ts = p.get('latest_handshake', 0)
+        handshake_ago = (now - handshake_ts) if handshake_ts > 0 else 99999
+        is_online = handshake_ago < 180
+        if is_online:
+            active_count += 1
+
+        # 字段映射：collector 上报格式 → 前端期望格式
+        transfer_rx = p.get('transfer_rx', 0)
+        transfer_tx = p.get('transfer_tx', 0)
+
+        enriched_peers.append({
+            'interface': p.get('interface', ''),
+            'peer': p.get('public_key', ''),
+            'name': p.get('public_key', 'unknown'),
+            'branch_id': '',
+            'status': 'online' if is_online else 'offline',
+            'endpoint': p.get('endpoint', ''),
+            'allowed_ips': p.get('allowed_ips', ''),
+            'last_handshake_seconds_ago': handshake_ago,
+            'rx_rate_mbps': round(transfer_rx / 1_000_000, 2) if transfer_rx else 0,
+            'tx_rate_mbps': round(transfer_tx / 1_000_000, 2) if transfer_tx else 0,
+            'transfer_rx': transfer_rx,
+            'transfer_tx': transfer_tx,
+        })
+
     tunnel_data = {
         'updated_at': now,
         'collector_heartbeat': hq_state.get('timestamp', 0),
         'system': hq_state.get('system', {}),
-        'peers': hq_state.get('peers', []),
+        'peers': enriched_peers,
         'totals': {'rx_mbps': 0, 'tx_mbps': 0},
     }
     tunnel_data['system']['hostname'] = hq_state.get('hostname', 'Unknown')
-    tunnel_data['system']['tunnel_active'] = sum(
-        1 for p in tunnel_data['peers']
-        if now - p.get('latest_handshake', 0) < 180
-    )
-    tunnel_data['system']['tunnel_total'] = len(tunnel_data['peers'])
+    tunnel_data['system']['tunnel_active'] = active_count
+    tunnel_data['system']['tunnel_total'] = len(raw_peers)
 
     with open(os.path.join(DATA_DIR, 'status-tunnel.json'), 'w') as f:
         json.dump(tunnel_data, f, indent=2)
