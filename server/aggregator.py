@@ -241,6 +241,18 @@ def verify_signature(body_bytes, ts_str, sig_str, hmac_key):
 
 
 # === 状态文件写入（兼容旧版前端） ===
+def _get_branch_endpoint(bstate):
+    """获取分支节点连接的对端 Endpoint（分支自身 wg dump 中的 peer endpoint）"""
+    wg_peers = bstate.get('wg_peers', [])
+    if wg_peers:
+        # 取第一个有 endpoint 的 peer（通常分支只有一个 peer = 总部）
+        for wp in wg_peers:
+            ep = wp.get('endpoint', '')
+            if ep:
+                return ep
+    return ''
+
+
 def _get_branch_allowed_ips(bstate, peer_endpoint_map, node_info):
     """
     获取分支节点的 Allowed IPs（仅使用分支自身上报数据）
@@ -431,7 +443,8 @@ def write_status_files():
             'system': sys_data,
             # IP 地理位置
             'geo': node_info.get('geo', None),
-            # 从 HQ peers 关联的 allowed_ips
+            # 从分支自身 wg_peers 获取 endpoint 和 allowed_ips
+            'endpoint': _get_branch_endpoint(bstate),
             'allowed_ips': _get_branch_allowed_ips(bstate, peer_endpoint_map, node_info),
         })
 
