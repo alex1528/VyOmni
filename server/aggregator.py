@@ -405,6 +405,12 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.handle_download_upgrade()
         elif path == '/api/tokens':
             self.handle_list_tokens()
+        elif path == '/api/tunnel':
+            self.handle_get_tunnel()
+        elif path == '/api/branches':
+            self.handle_get_branches()
+        elif path == '/api/config':
+            self.handle_get_config()
         elif re.match(r'^/api/deploy/tk_[0-9a-f]{12}$', path):
             token_str = path.split('/')[-1]
             self.handle_deploy_script(token_str)
@@ -483,6 +489,56 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_json(200, {'tokens': token_list})
 
     # --- 部署脚本端点 ---
+    def handle_get_tunnel(self):
+        """返回隧道状态数据（从 /data/status-tunnel.json 读取）"""
+        data_dir = os.environ.get('DATA_DIR', '/data')
+        filepath = os.path.join(data_dir, 'status-tunnel.json')
+        if os.path.exists(filepath):
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            self.send_json(200, data)
+        else:
+            # 无数据时返回空结构
+            self.send_json(200, {
+                'updated_at': 0,
+                'collector_heartbeat': 0,
+                'system': {'hostname': 'waiting...', 'cpu_percent': 0, 'memory_percent': 0, 'tunnel_active': 0, 'tunnel_total': 0},
+                'totals': {'rx_mbps': 0, 'tx_mbps': 0},
+                'peers': []
+            })
+
+    def handle_get_branches(self):
+        """返回分支状态数据（从 /data/status-branches.json 读取）"""
+        data_dir = os.environ.get('DATA_DIR', '/data')
+        filepath = os.path.join(data_dir, 'status-branches.json')
+        if os.path.exists(filepath):
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            self.send_json(200, data)
+        else:
+            self.send_json(200, {'updated_at': 0, 'branches': []})
+
+    def handle_get_config(self):
+        """返回平台配置（供前端读取）"""
+        config_path = os.environ.get('CONFIG_PATH', '/app/config.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        else:
+            config = {}
+
+        # 合并节点信息的 geo_locations
+        nodes = self.server.nodes if hasattr(self.server, 'nodes') else load_nodes()
+        geo = config.get('geo_locations', {})
+
+        result = {
+            'geo_locations': geo,
+            'node_defaults': config.get('node_defaults', {}),
+            'nodes_count': len(nodes),
+        }
+        self.send_json(200, result)
+
+
     def handle_deploy_script(self, token_str):
         """GET /api/deploy/{token} — 返回部署 bash 脚本"""
         with state_lock:
