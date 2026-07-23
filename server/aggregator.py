@@ -241,19 +241,18 @@ def verify_signature(body_bytes, ts_str, sig_str, hmac_key):
 
 
 # === 状态文件写入（兼容旧版前端） ===
-def _resolve_branch_display_name(node_info, peer_allowed_map):
-    """查找分支节点的显示别名（优先 peer_aliases，fallback 到 node display_name）"""
-    # 方式1：通过 node IP 在 peer_allowed_map 中找到对应 peer_key → 查 peer_aliases
+def _resolve_branch_display_name(node_info, peer_endpoint_map):
+    """
+    查找分支节点的显示别名
+    逻辑：branch上报IP → 在 peer_endpoint_map 中找匹配 → 拿到对应 peer_key → 查 peer_aliases
+    """
     node_ip = node_info.get('ip', '')
-    if node_ip and peer_aliases:
-        for peer_key, alias in peer_aliases.items():
-            # 检查该 peer 的 endpoint IP 是否匹配 node IP
-            # peer_allowed_map 的 key 是 endpoint_ip
-            if node_ip in peer_allowed_map:
-                # 这个 node 的 IP 是某个 peer 的 endpoint → 使用该 peer 的别名
-                return alias
-        # 也可通过 enriched_peers 查找
-    # 方式2：node 自身的 display_name
+    if node_ip and node_ip in peer_endpoint_map:
+        # 找到该 branch IP 对应的 peer 信息
+        matched_peer_key = peer_endpoint_map[node_ip].get('peer_key', '')
+        if matched_peer_key and matched_peer_key in peer_aliases:
+            return peer_aliases[matched_peer_key]
+    # fallback: node 自身的 display_name
     return node_info.get('display_name', '')
 
 
@@ -341,16 +340,20 @@ def write_status_files():
     # status-branches.json — 仅包含 approved 节点
     global prev_branch_interfaces
 
-    # 构建 IP→allowed_ips 映射（从 HQ peers 数据中提取）
-    peer_allowed_map = {}  # {endpoint_ip: allowed_ips_string}
+    # 构建 IP→peer信息 映射（从 HQ peers 数据中提取）
+    # key=endpoint_ip, value={'peer_key': 完整公钥, 'allowed_ips': 字符串}
+    peer_endpoint_map = {}
     for p in enriched_peers:
         ep = p.get('endpoint', '')
         if ':' in ep:
             ep_ip = ep.rsplit(':', 1)[0]  # 去掉端口
         else:
             ep_ip = ep
-        if ep_ip and p.get('allowed_ips'):
-            peer_allowed_map[ep_ip] = p['allowed_ips']
+        if ep_ip:
+            peer_endpoint_map[ep_ip] = {
+                'peer_key': p.get('peer', ''),
+                'allowed_ips': p.get('allowed_ips', ''),
+            }
 
     branches = []
     for bid, bstate in branch_states.items():
@@ -400,7 +403,7 @@ def write_status_files():
         branches.append({
             'branch_id': bid,
             'hostname': bstate.get('hostname', bid),
-            'display_name': _resolve_branch_display_name(node_info, peer_allowed_map) if node_info else '',
+            'display_name': _resolve_branch_display_name(node_info, peer_endpoint_map) if node_info else '',
             'reported_at': report_ts,
             'last_seen': report_ts,
             'online': now - report_ts < 60,
@@ -418,7 +421,7 @@ def write_status_files():
             # IP 地理位置
             'geo': node_info.get('geo', None),
             # 从 HQ peers 关联的 allowed_ips
-            'allowed_ips': peer_allowed_map.get(node_info.get('ip', ''), '') if node_info else '',
+            'allowed_ips': peer_endpoint_map.get(node_info.get('ip', ''), {}).get('allowed_ips', '') if node_info else '',
         })
 
     branch_data = {
