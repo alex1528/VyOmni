@@ -1236,3 +1236,23 @@ body {
     line-height: 1.7;
     white-space: normal;
 }
+
+/* === Endpoint 字段独占整行 + 两端对齐 === */
+.metric-endpoint {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border-color, #2a3a4a);
+}
+
+.metric-endpoint .label {
+    color: var(--text-secondary, #9aa0a6);
+}
+
+.metric-endpoint .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9em;
+    text-align: right;
+}
