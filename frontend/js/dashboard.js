@@ -1078,11 +1078,11 @@ function renderNodeStats() {
     const online = nodesData.filter(n => n.status === 'approved' && now - n.last_seen < 60).length;
 
     el.innerHTML = `
-        <div class="node-stat"><span class="node-stat-num">${total}</span><span class="node-stat-label">总节点</span></div>
-        <div class="node-stat pending"><span class="node-stat-num">${pending}</span><span class="node-stat-label">待审核</span></div>
-        <div class="node-stat approved"><span class="node-stat-num">${approved}</span><span class="node-stat-label">已通过</span></div>
-        <div class="node-stat online"><span class="node-stat-num">${online}</span><span class="node-stat-label">在线</span></div>
-        <div class="node-stat rejected"><span class="node-stat-num">${rejected}</span><span class="node-stat-label">已拒绝</span></div>
+        <div class="node-stat-card stat-total"><div class="stat-value">${total}</div><div class="stat-label">总节点</div></div>
+        <div class="node-stat-card stat-pending"><div class="stat-value">${pending}</div><div class="stat-label">待审核</div></div>
+        <div class="node-stat-card stat-online"><div class="stat-value">${approved}</div><div class="stat-label">已通过</div></div>
+        <div class="node-stat-card stat-online"><div class="stat-value">${online}</div><div class="stat-label"><i class="fas fa-circle" style="color:var(--accent-green);font-size:8px"></i> 在线</div></div>
+        <div class="node-stat-card stat-offline"><div class="stat-value">${rejected}</div><div class="stat-label">已拒绝</div></div>
     `;
 }
 
