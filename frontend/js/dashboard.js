@@ -1152,7 +1152,7 @@ function getNodeStatusBadge(status) {
     return map[status] || `<span class="status-badge">${status}</span>`;
 }
 
-async function nodeAction(action, nodeId) {
+async async function nodeAction(action, nodeId) {
     if (action === 'delete') {
         if (!confirm(`确定删除节点 ${nodeId}？此操作不可逆。`)) return;
         const resp = await fetch(NODE_API.delete(nodeId), { method: 'DELETE' });

@@ -545,15 +545,11 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     # --- Token 生成 ---
     def handle_delete_token(self, token_id):
-        """DELETE /api/tokens/{token} — 删除未使用的 Token"""
+        """DELETE /api/tokens/{token} — 删除 Token（所有状态均可删除）"""
         with state_lock:
             load_tokens()  # 刷新全局 deploy_tokens
             if token_id not in deploy_tokens:
                 self.send_json(404, {'error': 'Token not found'})
-                return
-            token_info = deploy_tokens[token_id]
-            if token_info.get('status') == 'used':
-                self.send_json(400, {'error': 'Cannot delete used token'})
                 return
             del deploy_tokens[token_id]
             save_tokens()
