@@ -508,9 +508,10 @@ function updateTrendCharts() {
 function updateTopology() {
     if (!chartTopology || !tunnelData) return;
     const peers = tunnelData.peers;
+    const centerName = tunnelData.system.hostname || '总部';
     const nodes = [
         {
-            name: tunnelData.system.hostname || '总部',
+            name: centerName,
             x: 300, y: 200,
             symbolSize: 50,
             itemStyle: { color: '#4fc3f7' },
@@ -538,7 +539,7 @@ function updateTopology() {
         });
 
         links.push({
-            source: '总部',
+            source: centerName,
             target: peer.display_name || peer.name || `Peer-${i}`,
             lineStyle: {
                 width: 1 + Math.min(traffic, 10),
