@@ -390,6 +390,13 @@ def write_status_files():
     }
 
     hq_sys = hq_state.get('system', {})
+    # 总部 wg0 概要：最近握手时间（所有 peer 中最小的 handshake_ago）
+    min_handshake = -1
+    for p in enriched_peers:
+        ha = p.get('last_handshake_seconds_ago', 99999)
+        if ha < 99999 and (min_handshake < 0 or ha < min_handshake):
+            min_handshake = ha
+
     tunnel_data['hq_resource'] = {
         'hostname': hq_state.get('hostname', 'Unknown'),
         'cpu_percent': hq_sys.get('cpu_percent', 0),
@@ -400,6 +407,8 @@ def write_status_files():
         'tunnel_active': active_count,
         'tunnel_total': len(raw_peers),
         'interfaces': hq_enriched_ifaces,
+        'wg_interface': 'wg0',
+        'wg_handshake_seconds_ago': min_handshake if min_handshake >= 0 else -1,
     }
 
     with open(os.path.join(DATA_DIR, 'status-tunnel.json'), 'w') as f:

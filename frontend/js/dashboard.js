@@ -147,10 +147,12 @@ function showBranchDetail(br) {
         <div class="detail-grid">
             <div class="detail-item"><span class="label">${titleLabel}</span><span class="value">${escHtml(br.display_name || br.hostname || br.branch_id)} ${isHq ? '' : '<i class="fas fa-pen branch-rename-btn" data-node-id="' + escAttr(br.branch_id) + '" data-current-name="' + escAttr(br.display_name || br.hostname || br.branch_id) + '" title="设置别名" style="font-size:0.7em;opacity:0.5;cursor:pointer"></i>'}</span></div>
             <div class="detail-item"><span class="label">状态</span><span class="value">${br.stale ? '🟡 中断' : '🟢 正常'}</span></div>
+            <div class="detail-item"><span class="label">接口</span><span class="value">${br.wg_interface || '-'}</span></div>
+            <div class="detail-item"><span class="label">握手</span><span class="value">${br.wg_handshake_seconds_ago >= 0 ? br.wg_handshake_seconds_ago + 's ago' : '-'}</span></div>
             ${isHq ? '<div class="detail-item"><span class="label">隧道</span><span class="value">' + (br.tunnel_active || 0) + ' / ' + (br.tunnel_total || 0) + '</span></div>' : ''}
             <div class="detail-item"><span class="label">CPU</span><span class="value">${br.cpu_percent?.toFixed(1) || '-'}%</span></div>
             <div class="detail-item"><span class="label">内存</span><span class="value">${br.memory_percent?.toFixed(1) || '-'}%</span></div>
-            <div class="detail-item"><span class="label">负载 1/5/15</span><span class="value">${(br.load_1m != null ? br.load_1m : '-')} / ${(br.load_5m != null ? br.load_5m : '-')} / ${(br.load_15m != null ? br.load_15m : '-')}</span></div>
+            <div class="detail-item"><span class="label">负载</span><span class="value">${(br.load_1m != null ? br.load_1m : '-')} / ${(br.load_5m != null ? br.load_5m : '-')} / ${(br.load_15m != null ? br.load_15m : '-')}</span></div>
             <div class="detail-item"><span class="label">上报时间</span><span class="value">${formatTime(br.reported_at)}</span></div>
             ${ifaceRows}
         </div>
@@ -324,7 +326,7 @@ function renderBranchGrid() {
                 }).join('');
         }
         // 构造与分支相同结构的数据对象，用于点击弹窗
-        const hqBranchData = { branch_id: '__hq__', hostname: hq.hostname, display_name: hq.hostname, cpu_percent: hq.cpu_percent, memory_percent: hq.memory_percent, load_1m: hq.load_1m, load_5m: hq.load_5m, load_15m: hq.load_15m, interfaces: hq.interfaces, reported_at: tunnelData.updated_at, stale: false, tunnel_active: hq.tunnel_active, tunnel_total: hq.tunnel_total };
+        const hqBranchData = { branch_id: '__hq__', hostname: hq.hostname, display_name: hq.hostname, cpu_percent: hq.cpu_percent, memory_percent: hq.memory_percent, load_1m: hq.load_1m, load_5m: hq.load_5m, load_15m: hq.load_15m, interfaces: hq.interfaces, reported_at: tunnelData.updated_at, stale: false, tunnel_active: hq.tunnel_active, tunnel_total: hq.tunnel_total, wg_interface: hq.wg_interface, wg_handshake_seconds_ago: hq.wg_handshake_seconds_ago };
         hqCardHtml = `
         <div class="branch-card active hq-card" data-branch='${escAttr(JSON.stringify(hqBranchData))}'>
             <div class="card-header">
@@ -332,10 +334,12 @@ function renderBranchGrid() {
                 <span class="status active">总部在线</span>
             </div>
             <div class="card-metrics">
+                <div class="metric"><span class="label">接口</span><span class="value">${hq.wg_interface || 'wg0'}</span></div>
+                <div class="metric"><span class="label">握手</span><span class="value">${hq.wg_handshake_seconds_ago >= 0 ? hq.wg_handshake_seconds_ago + 's ago' : '-'}</span></div>
                 <div class="metric"><span class="label">CPU</span><span class="value">${hq.cpu_percent?.toFixed(1) || '0'}%</span></div>
                 <div class="metric"><span class="label">内存</span><span class="value">${hq.memory_percent?.toFixed(1) || '0'}%</span></div>
                 <div class="metric"><span class="label">隧道</span><span class="value">${hq.tunnel_active || 0} / ${hq.tunnel_total || 0}</span></div>
-                <div class="metric"><span class="label">负载 1/5/15</span><span class="value">${hq.load_1m != null ? hq.load_1m : '-'} / ${hq.load_5m != null ? hq.load_5m : '-'} / ${hq.load_15m != null ? hq.load_15m : '-'}</span></div>
+                <div class="metric metric-full"><span class="label">负载</span><span class="value load-values">${hq.load_1m != null ? hq.load_1m : '-'} / ${hq.load_5m != null ? hq.load_5m : '-'} / ${hq.load_15m != null ? hq.load_15m : '-'}</span></div>
                 <div class="metric"><span class="label">更新</span><span class="value">${formatTime(tunnelData.updated_at)}</span></div>
                 ${hqIfaceHtml}
             </div>
@@ -367,7 +371,7 @@ function renderBranchGrid() {
                 ${br.allowed_ips ? '<div class="metric metric-full"><span class="label">Allowed IPs</span><span class="value allowed-ips-list">' + br.allowed_ips.split(",").map(function(s){return s.trim()}).join("<br/>") + '</span></div>' : ''}
                 <div class="metric"><span class="label">CPU</span><span class="value">${br.cpu_percent?.toFixed(1) || '-'}%</span></div>
                 <div class="metric"><span class="label">内存</span><span class="value">${br.memory_percent?.toFixed(1) || '-'}%</span></div>
-                <div class="metric"><span class="label">负载 1/5/15</span><span class="value">${(br.load_1m != null ? br.load_1m : '-')} / ${(br.load_5m != null ? br.load_5m : '-')} / ${(br.load_15m != null ? br.load_15m : '-')}</span></div>
+                <div class="metric metric-full"><span class="label">负载</span><span class="value load-values">${(br.load_1m != null ? br.load_1m : '-')} / ${(br.load_5m != null ? br.load_5m : '-')} / ${(br.load_15m != null ? br.load_15m : '-')}</span></div>
                 <div class="metric"><span class="label">上报时间</span><span class="value">${formatTime(br.reported_at)}</span></div>
                 ${ifaceHtml}
             </div>

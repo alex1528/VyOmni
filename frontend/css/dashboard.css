@@ -1257,6 +1257,16 @@ body {
     text-align: right;
 }
 
+/* === 负载值样式 === */
+.load-values {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    letter-spacing: 0.5px;
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+}
+
 /* === 拓扑 + 地图并排一行 === */
 .topo-map-row {
     display: flex;
