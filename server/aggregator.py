@@ -211,14 +211,16 @@ def consume_deploy_token(token_str, node_id):
 
 
 def cleanup_expired_tokens():
-    """清理过期 Token"""
+    """清理过期且未使用的 Token（直接删除）"""
     now = int(time.time())
-    changed = False
-    for tk, info in deploy_tokens.items():
-        if info['status'] == 'unused' and now > info['expires_at']:
-            info['status'] = 'expired'
-            changed = True
-    if changed:
+    to_delete = [
+        tk for tk, info in deploy_tokens.items()
+        if info['status'] == 'unused' and now > info['expires_at']
+    ]
+    for tk in to_delete:
+        del deploy_tokens[tk]
+    if to_delete:
+        print(f'[TOKEN] Auto-cleaned {len(to_delete)} expired token(s)')
         save_tokens()
 
 
@@ -770,6 +772,9 @@ class ApiHandler(BaseHTTPRequestHandler):
             cleanup_expired_tokens()
             token_list = []
             for tk, info in deploy_tokens.items():
+                # 已被节点绑定（used）的 token 不再显示
+                if info['status'] == 'used':
+                    continue
                 token_list.append({
                     'token': info['token'],
                     'name': info['name'],
@@ -921,6 +926,10 @@ class ApiHandler(BaseHTTPRequestHandler):
             # 检查是否已注册
             if node_id in nodes:
                 existing = nodes[node_id]
+                # 更新 version（升级重启后重新注册时带入新版本号）
+                if payload.get('version') and payload['version'] != existing.get('version', ''):
+                    existing['version'] = payload['version']
+                    save_nodes()
                 if token.startswith('tk_'):
                     consume_deploy_token(token, node_id)
                 self.send_json(200, {
@@ -1264,6 +1273,7 @@ def main():
     load_nodes()
     load_tokens()
     load_upgrade_info()
+    cleanup_expired_tokens()  # 启动时清理过期 token
 
     print('[INFO] VyOmni Aggregator v2.1 starting...')
     print('[INFO] Listening on :' + str(LISTEN_PORT))
