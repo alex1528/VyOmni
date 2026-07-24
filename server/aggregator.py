@@ -80,7 +80,6 @@ def save_peer_aliases():
 
 prev_branch_interfaces = {}  # {branch_id: {iface: {'rx': bytes, 'tx': bytes}}}
 prev_branch_report_time = {}  # {branch_id: last_report_timestamp}
-prev_branch_rates = {}  # {branch_id: {iface: {'rx_mbps': float, 'tx_mbps': float}}} — 缓存上次计算的速率
 prev_hq_interfaces = {}  # {iface: {'rx': bytes, 'tx': bytes}}
 prev_report_time = 0
 branch_states = {}  # branch_id -> 最近一次分支上报
@@ -424,7 +423,7 @@ def write_status_files():
         json.dump(tunnel_data, f, indent=2)
 
     # status-branches.json — 仅包含 approved 节点
-    global prev_branch_interfaces, prev_branch_report_time, prev_branch_rates
+    global prev_branch_interfaces, prev_branch_report_time
 
     # 构建 IP→peer信息 映射（从 HQ peers 数据中提取）
     # key=endpoint_ip, value={'peer_key': 完整公钥, 'allowed_ips': 字符串}
@@ -458,54 +457,35 @@ def write_status_files():
         prev_ts = prev_branch_report_time.get(bid, 0)
         dt_branch = (report_ts - prev_ts) if (prev_ts > 0 and report_ts > prev_ts) else 0
 
-        if dt_branch > 0:
-            # 有新数据，重新计算速率
-            enriched_ifaces = {}
-            for iface, idata in raw_ifaces.items():
-                rx_bytes = idata.get('rx_bytes', 0)
-                tx_bytes = idata.get('tx_bytes', 0)
-                rx_rate = 0.0
-                tx_rate = 0.0
+        # 计算速率（与隧道 peer 完全相同的逻辑）
+        enriched_ifaces = {}
+        for iface, idata in raw_ifaces.items():
+            rx_bytes = idata.get('rx_bytes', 0)
+            tx_bytes = idata.get('tx_bytes', 0)
+            rx_rate = 0.0
+            tx_rate = 0.0
 
-                if iface in prev_ifaces:
-                    prev = prev_ifaces[iface]
-                    delta_rx = rx_bytes - prev.get('rx', 0)
-                    delta_tx = tx_bytes - prev.get('tx', 0)
-                    if delta_rx >= 0 and delta_tx >= 0:
-                        rx_rate = round(delta_rx * 8 / dt_branch / 1_000_000, 3)
-                        tx_rate = round(delta_tx * 8 / dt_branch / 1_000_000, 3)
+            if iface in prev_ifaces and dt_branch > 0:
+                prev = prev_ifaces[iface]
+                delta_rx = rx_bytes - prev.get('rx', 0)
+                delta_tx = tx_bytes - prev.get('tx', 0)
+                if delta_rx >= 0 and delta_tx >= 0:
+                    rx_rate = round(delta_rx * 8 / dt_branch / 1_000_000, 3)
+                    tx_rate = round(delta_tx * 8 / dt_branch / 1_000_000, 3)
 
-                enriched_ifaces[iface] = {
-                    'rx_mbps': rx_rate,
-                    'tx_mbps': tx_rate,
-                    'rx_bytes': rx_bytes,
-                    'tx_bytes': tx_bytes,
-                }
-
-            # 仅在有新数据时更新历史
-            prev_branch_interfaces[bid] = {
-                iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
-                for iface, idata in raw_ifaces.items()
+            enriched_ifaces[iface] = {
+                'rx_mbps': rx_rate,
+                'tx_mbps': tx_rate,
+                'rx_bytes': rx_bytes,
+                'tx_bytes': tx_bytes,
             }
-            prev_branch_report_time[bid] = report_ts
-            prev_branch_rates[bid] = enriched_ifaces
-        elif prev_ts == 0 and report_ts > 0:
-            # 首次遇到该分支 — 初始化基线（不计算速率）
-            prev_branch_interfaces[bid] = {
-                iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
-                for iface, idata in raw_ifaces.items()
-            }
-            prev_branch_report_time[bid] = report_ts
-            enriched_ifaces = prev_branch_rates.get(bid, {
-                iface: {'rx_mbps': 0, 'tx_mbps': 0, 'rx_bytes': idata.get('rx_bytes', 0), 'tx_bytes': idata.get('tx_bytes', 0)}
-                for iface, idata in raw_ifaces.items()
-            })
-        else:
-            # report_ts 未变化（HQ触发），使用上次缓存的速率
-            enriched_ifaces = prev_branch_rates.get(bid, {
-                iface: {'rx_mbps': 0, 'tx_mbps': 0, 'rx_bytes': idata.get('rx_bytes', 0), 'tx_bytes': idata.get('tx_bytes', 0)}
-                for iface, idata in raw_ifaces.items()
-            })
+
+        # 无条件更新历史（与隧道 prev_peer_transfer 逻辑一致）
+        prev_branch_interfaces[bid] = {
+            iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
+            for iface, idata in raw_ifaces.items()
+        }
+        prev_branch_report_time[bid] = report_ts
 
         branches.append({
             'branch_id': bid,
