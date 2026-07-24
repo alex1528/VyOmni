@@ -339,8 +339,8 @@ function renderBranchGrid() {
                 <div class="metric"><span class="label">CPU</span><span class="value">${hq.cpu_percent?.toFixed(1) || '0'}%</span></div>
                 <div class="metric"><span class="label">内存</span><span class="value">${hq.memory_percent?.toFixed(1) || '0'}%</span></div>
                 <div class="metric"><span class="label">隧道</span><span class="value">${hq.tunnel_active || 0} / ${hq.tunnel_total || 0}</span></div>
-                <div class="metric metric-full"><span class="label">负载</span><span class="value load-values">${hq.load_1m != null ? hq.load_1m : '-'} / ${hq.load_5m != null ? hq.load_5m : '-'} / ${hq.load_15m != null ? hq.load_15m : '-'}</span></div>
                 <div class="metric"><span class="label">更新</span><span class="value">${formatTime(tunnelData.updated_at)}</span></div>
+                <div class="metric metric-full"><span class="label">负载</span><span class="value load-values">${hq.load_1m != null ? hq.load_1m : '-'} / ${hq.load_5m != null ? hq.load_5m : '-'} / ${hq.load_15m != null ? hq.load_15m : '-'}</span></div>
                 ${hqIfaceHtml}
             </div>
         </div>`;
