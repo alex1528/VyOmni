@@ -211,7 +211,7 @@ def consume_deploy_token(token_str, node_id):
 
 
 def cleanup_expired_tokens():
-    """清理 Token：过期未使用的直接删除 + 已使用超30天且无节点绑定的也删除"""
+    """清理 Token：过期未使用的直接删除 + 已使用超30天且无有效节点绑定的也删除"""
     now = int(time.time())
     USED_RETENTION_DAYS = 30
     to_delete = [
@@ -220,10 +220,12 @@ def cleanup_expired_tokens():
             # 未使用但已过期
             (info['status'] == 'unused' and now > info['expires_at'])
             or
-            # 已使用超过30天，且绑定的节点已不存在
+            # 已使用超过30天，且无有效节点绑定
+            # （used_by_node 为空 或 对应节点已被删除）
             (info['status'] == 'used'
              and now - info.get('used_at', info['created_at']) > USED_RETENTION_DAYS * 86400
-             and info.get('used_by_node', '') not in nodes)
+             and (not info.get('used_by_node')
+                  or info['used_by_node'] not in nodes))
         )
     ]
     for tk in to_delete:
@@ -968,6 +970,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 'registered_at': int(time.time()),
                 'last_seen': 0,
                 'custom_labels': {},
+                'deploy_token': token if token.startswith('tk_') else None,
             }
 
             # 如果有 Token 的 name，也作为 label
@@ -1160,6 +1163,12 @@ class ApiHandler(BaseHTTPRequestHandler):
             if node_id not in nodes:
                 self.send_json(404, {'error': 'node not found'})
                 return
+            # 解除 token 绑定关系
+            node = nodes[node_id]
+            bound_token = node.get('deploy_token')
+            if bound_token and bound_token in deploy_tokens:
+                deploy_tokens[bound_token]['used_by_node'] = None
+                save_tokens()
             del nodes[node_id]
             branch_states.pop(node_id, None)
             save_nodes()
