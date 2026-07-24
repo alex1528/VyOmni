@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initModal();
     initNodeManagement();
     fetchConfig();
+    loadHistory();
     poll();
     setInterval(poll, POLL_INTERVAL);
 });
@@ -517,6 +518,30 @@ function getLineChartOption(seriesNames) {
 }
 
 // ==================== 图表更新 ====================
+async function loadHistory() {
+    try {
+        const data = await fetchJSON('/api/history');
+        if (!data) return;
+        // 加载隧道带宽历史
+        if (data.tunnel) {
+            tunnelHistory.time = data.tunnel.time || [];
+            tunnelHistory.rx = data.tunnel.rx || [];
+            tunnelHistory.tx = data.tunnel.tx || [];
+        }
+        // 加载各分支/总部负载历史
+        if (data.branches) {
+            for (const [bid, bh] of Object.entries(data.branches)) {
+                branchHistory[bid] = {
+                    time: bh.time || [],
+                    cpu: bh.cpu || [],
+                    mem: bh.mem || [],
+                };
+            }
+        }
+        updateTrendCharts();
+    } catch (e) { /* 首次无数据时静默 */ }
+}
+
 function updateCharts() {
     if (!tunnelData || !chartTunnel) return;
     const now = new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });

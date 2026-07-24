@@ -82,6 +82,9 @@ prev_report_time = 0
 branch_states = {}  # branch_id -> 最近一次分支上报
 upgrade_info = None  # 当前可用升级信息
 deploy_tokens = {}  # token_str -> token_info
+# 流量趋势历史（持久化到 /data/history.json）
+HISTORY_MAX_POINTS = 17280  # 24h @ 5s interval
+trend_history = {'tunnel': {'time': [], 'rx': [], 'tx': []}, 'branches': {}}
 
 
 # === 持久化 ===
@@ -119,6 +122,36 @@ def save_tokens():
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(TOKENS_FILE, 'w') as f:
         json.dump(deploy_tokens, f, indent=2, ensure_ascii=False)
+
+
+HISTORY_FILE = os.path.join(DATA_DIR, 'history.json')
+_history_save_counter = 0  # 控制保存频率
+
+
+def load_history():
+    """从磁盘加载历史趋势数据"""
+    global trend_history
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE) as f:
+                trend_history = json.load(f)
+            # 兼容性：确保结构完整
+            if 'tunnel' not in trend_history:
+                trend_history['tunnel'] = {'time': [], 'rx': [], 'tx': []}
+            if 'branches' not in trend_history:
+                trend_history['branches'] = {}
+        except (json.JSONDecodeError, IOError):
+            trend_history = {'tunnel': {'time': [], 'rx': [], 'tx': []}, 'branches': {}}
+
+
+def save_history():
+    """持久化历史趋势数据（由 write_status_files 定期触发）"""
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(HISTORY_FILE, 'w') as f:
+            json.dump(trend_history, f, separators=(',', ':'))
+    except IOError:
+        pass
 
 
 def load_upgrade_info():
@@ -499,6 +532,54 @@ def write_status_files():
     with open(os.path.join(DATA_DIR, 'status-branches.json'), 'w') as f:
         json.dump(branch_data, f, indent=2)
 
+    # === 追加趋势历史数据 ===
+    global _history_save_counter
+    ts_str = time.strftime('%H:%M:%S')
+
+    # 隧道总带宽
+    th = trend_history['tunnel']
+    th['time'].append(ts_str)
+    th['rx'].append(round(total_rx_rate, 2))
+    th['tx'].append(round(total_tx_rate, 2))
+    if len(th['time']) > HISTORY_MAX_POINTS:
+        th['time'] = th['time'][-HISTORY_MAX_POINTS:]
+        th['rx'] = th['rx'][-HISTORY_MAX_POINTS:]
+        th['tx'] = th['tx'][-HISTORY_MAX_POINTS:]
+
+    # 各分支 + 总部 CPU/内存
+    bh = trend_history['branches']
+    # 总部
+    if hq_state.get('system'):
+        if '__hq__' not in bh:
+            bh['__hq__'] = {'time': [], 'cpu': [], 'mem': []}
+        h = bh['__hq__']
+        h['time'].append(ts_str)
+        h['cpu'].append(hq_sys.get('cpu_percent', 0))
+        h['mem'].append(hq_sys.get('memory_percent', 0))
+        if len(h['time']) > HISTORY_MAX_POINTS:
+            h['time'] = h['time'][-HISTORY_MAX_POINTS:]
+            h['cpu'] = h['cpu'][-HISTORY_MAX_POINTS:]
+            h['mem'] = h['mem'][-HISTORY_MAX_POINTS:]
+    # 各分支
+    for br in branches:
+        bid = br['branch_id']
+        if bid not in bh:
+            bh[bid] = {'time': [], 'cpu': [], 'mem': []}
+        h = bh[bid]
+        h['time'].append(ts_str)
+        h['cpu'].append(br.get('cpu_percent', 0))
+        h['mem'].append(br.get('memory_percent', 0))
+        if len(h['time']) > HISTORY_MAX_POINTS:
+            h['time'] = h['time'][-HISTORY_MAX_POINTS:]
+            h['cpu'] = h['cpu'][-HISTORY_MAX_POINTS:]
+            h['mem'] = h['mem'][-HISTORY_MAX_POINTS:]
+
+    # 每 12 次写入磁盘一次（约 60s @5s interval），减少 IO
+    _history_save_counter += 1
+    if _history_save_counter >= 12:
+        _history_save_counter = 0
+        save_history()
+
 
 # === 构建 report 响应（含动态配置+升级通知） ===
 def build_report_response(node_id):
@@ -702,6 +783,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.handle_get_tunnel()
         elif path == '/api/branches':
             self.handle_get_branches()
+        elif path == '/api/history':
+            self.handle_get_history()
         elif path == '/api/config':
             self.handle_get_config()
         elif re.match(r'^/api/deploy/tk_[0-9a-f]{12}$', path):
@@ -834,6 +917,10 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.send_json(200, data)
         else:
             self.send_json(200, {'updated_at': 0, 'branches': []})
+
+    def handle_get_history(self):
+        """GET /api/history — 返回趋势历史数据（持久化的滚动数据）"""
+        self.send_json(200, trend_history)
 
     def handle_get_config(self):
         """返回平台配置（供前端读取）"""
@@ -1291,6 +1378,7 @@ def main():
     load_nodes()
     load_tokens()
     load_upgrade_info()
+    load_history()
     cleanup_expired_tokens()  # 启动时清理过期 token
 
     print('[INFO] VyOmni Aggregator v2.1 starting...')
