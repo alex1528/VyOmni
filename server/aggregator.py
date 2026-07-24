@@ -211,11 +211,20 @@ def consume_deploy_token(token_str, node_id):
 
 
 def cleanup_expired_tokens():
-    """清理过期且未使用的 Token（直接删除）"""
+    """清理 Token：过期未使用的直接删除 + 已使用超30天且无节点绑定的也删除"""
     now = int(time.time())
+    USED_RETENTION_DAYS = 30
     to_delete = [
         tk for tk, info in deploy_tokens.items()
-        if info['status'] == 'unused' and now > info['expires_at']
+        if (
+            # 未使用但已过期
+            (info['status'] == 'unused' and now > info['expires_at'])
+            or
+            # 已使用超过30天，且绑定的节点已不存在
+            (info['status'] == 'used'
+             and now - info.get('used_at', info['created_at']) > USED_RETENTION_DAYS * 86400
+             and info.get('used_by_node', '') not in nodes)
+        )
     ]
     for tk in to_delete:
         del deploy_tokens[tk]

@@ -925,12 +925,6 @@ function getNodePanelHtml() {
         </div>
         <div class="node-stats-bar" id="node-stats-bar"></div>
 
-        <!-- Token 列表 -->
-        <div class="token-section" id="token-section">
-            <h3><i class="fas fa-key"></i> 部署 Token</h3>
-            <div class="token-list" id="token-list"></div>
-        </div>
-
         <div class="node-table-wrap">
             <table class="node-table" id="node-table">
                 <thead>
@@ -953,7 +947,7 @@ function getNodePanelHtml() {
 
 function bindNodePanelEvents() {
     const refreshBtn = document.getElementById('btn-refresh-nodes');
-    if (refreshBtn) refreshBtn.addEventListener('click', () => { fetchNodes(); fetchTokens(); });
+    if (refreshBtn) refreshBtn.addEventListener('click', () => { fetchNodes(); });
 
     const addBtn = document.getElementById('btn-add-node');
     if (addBtn) addBtn.addEventListener('click', showAddNodeModal);
@@ -972,7 +966,6 @@ function openNodeManagementModal() {
     setTimeout(() => {
         bindNodePanelEvents();
         fetchNodes();
-        fetchTokens();
     }, 100);
 }
 
