@@ -78,9 +78,6 @@ def save_peer_aliases():
     with open(PEER_ALIASES_FILE, 'w') as f:
         json.dump(peer_aliases, f, indent=2, ensure_ascii=False)
 
-prev_branch_interfaces = {}  # {branch_id: {iface: {'rx': bytes, 'tx': bytes}}}
-prev_branch_report_time = {}  # {branch_id: last_report_timestamp}
-prev_hq_interfaces = {}  # {iface: {'rx': bytes, 'tx': bytes}}
 prev_report_time = 0
 branch_states = {}  # branch_id -> 最近一次分支上报
 upgrade_info = None  # 当前可用升级信息
@@ -382,29 +379,15 @@ def write_status_files():
     tunnel_data['system']['tunnel_total'] = len(raw_peers)
 
     
-    # === 总部资源（网卡速率差值计算）===
-    global prev_hq_interfaces
+    # === 总部资源（直接使用 agent 端计算的速率）===
     hq_raw_ifaces = hq_state.get('interfaces', {})
-    hq_enriched_ifaces = {}
-    for iface, idata in hq_raw_ifaces.items():
-        rx_bytes = idata.get('rx_bytes', 0)
-        tx_bytes = idata.get('tx_bytes', 0)
-        rx_rate = 0.0
-        tx_rate = 0.0
-        if iface in prev_hq_interfaces and dt > 0:
-            prev = prev_hq_interfaces[iface]
-            delta_rx = rx_bytes - prev.get('rx', 0)
-            delta_tx = tx_bytes - prev.get('tx', 0)
-            if delta_rx >= 0 and delta_tx >= 0:
-                rx_rate = round(delta_rx * 8 / dt / 1_000_000, 3)
-                tx_rate = round(delta_tx * 8 / dt / 1_000_000, 3)
-        hq_enriched_ifaces[iface] = {'rx_mbps': rx_rate, 'tx_mbps': tx_rate}
-
-    if report_time > prev_report_time or not prev_hq_interfaces:
-        prev_hq_interfaces = {
-            iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
-            for iface, idata in hq_raw_ifaces.items()
+    hq_enriched_ifaces = {
+        iface: {
+            'rx_mbps': idata.get('rx_mbps', 0),
+            'tx_mbps': idata.get('tx_mbps', 0),
         }
+        for iface, idata in hq_raw_ifaces.items()
+    }
 
     hq_sys = hq_state.get('system', {})
     tunnel_data['hq_resource'] = {
@@ -423,8 +406,6 @@ def write_status_files():
         json.dump(tunnel_data, f, indent=2)
 
     # status-branches.json — 仅包含 approved 节点
-    global prev_branch_interfaces, prev_branch_report_time
-
     # 构建 IP→peer信息 映射（从 HQ peers 数据中提取）
     # key=endpoint_ip, value={'peer_key': 完整公钥, 'allowed_ips': 字符串}
     # key=endpoint_ip, value={'peer_key': 完整公钥, 'allowed_ips': 字符串}
@@ -452,40 +433,14 @@ def write_status_files():
         report_ts = bstate.get('timestamp', 0)
         raw_ifaces = bstate.get('interfaces', {})
 
-        # 接口速率差值计算
-        prev_ifaces = prev_branch_interfaces.get(bid, {})
-        prev_ts = prev_branch_report_time.get(bid, 0)
-        dt_branch = (report_ts - prev_ts) if (prev_ts > 0 and report_ts > prev_ts) else 0
-
-        # 计算速率（与隧道 peer 完全相同的逻辑）
-        enriched_ifaces = {}
-        for iface, idata in raw_ifaces.items():
-            rx_bytes = idata.get('rx_bytes', 0)
-            tx_bytes = idata.get('tx_bytes', 0)
-            rx_rate = 0.0
-            tx_rate = 0.0
-
-            if iface in prev_ifaces and dt_branch > 0:
-                prev = prev_ifaces[iface]
-                delta_rx = rx_bytes - prev.get('rx', 0)
-                delta_tx = tx_bytes - prev.get('tx', 0)
-                if delta_rx >= 0 and delta_tx >= 0:
-                    rx_rate = round(delta_rx * 8 / dt_branch / 1_000_000, 3)
-                    tx_rate = round(delta_tx * 8 / dt_branch / 1_000_000, 3)
-
-            enriched_ifaces[iface] = {
-                'rx_mbps': rx_rate,
-                'tx_mbps': tx_rate,
-                'rx_bytes': rx_bytes,
-                'tx_bytes': tx_bytes,
+        # 接口速率 — 直接使用 agent 端计算的 rx_mbps/tx_mbps
+        enriched_ifaces = {
+            iface: {
+                'rx_mbps': idata.get('rx_mbps', 0),
+                'tx_mbps': idata.get('tx_mbps', 0),
             }
-
-        # 无条件更新历史（与隧道 prev_peer_transfer 逻辑一致）
-        prev_branch_interfaces[bid] = {
-            iface: {'rx': idata.get('rx_bytes', 0), 'tx': idata.get('tx_bytes', 0)}
             for iface, idata in raw_ifaces.items()
         }
-        prev_branch_report_time[bid] = report_ts
 
         branches.append({
             'branch_id': bid,

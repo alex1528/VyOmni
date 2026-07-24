@@ -19,8 +19,13 @@ from agent_common import (
 )
 
 
-def collect_interfaces():
-    """采集所有 eth*/wg* 网卡流量（与 branch_agent 同款逻辑）"""
+# 网卡流量历史（agent 端差值计算）
+_prev_iface_bytes = {}
+_prev_iface_time = 0
+
+
+def _read_proc_net_dev():
+    """读取 /proc/net/dev 原始字节数"""
     interfaces = {}
     try:
         with open('/proc/net/dev') as f:
@@ -37,6 +42,42 @@ def collect_interfaces():
     except Exception:
         pass
     return interfaces
+
+
+def collect_interfaces():
+    """采集所有 eth*/wg* 网卡流量 + 计算实时速率（agent 端差值）"""
+    global _prev_iface_bytes, _prev_iface_time
+
+    now = time.time()
+    raw = _read_proc_net_dev()
+    dt = (now - _prev_iface_time) if _prev_iface_time > 0 else 0
+
+    result = {}
+    for iface, data in raw.items():
+        rx_bytes = data['rx_bytes']
+        tx_bytes = data['tx_bytes']
+        rx_mbps = 0.0
+        tx_mbps = 0.0
+
+        if iface in _prev_iface_bytes and dt > 1:
+            prev = _prev_iface_bytes[iface]
+            delta_rx = rx_bytes - prev['rx']
+            delta_tx = tx_bytes - prev['tx']
+            if delta_rx >= 0 and delta_tx >= 0:
+                rx_mbps = round(delta_rx * 8 / dt / 1_000_000, 3)
+                tx_mbps = round(delta_tx * 8 / dt / 1_000_000, 3)
+
+        result[iface] = {
+            'rx_bytes': rx_bytes,
+            'tx_bytes': tx_bytes,
+            'rx_mbps': rx_mbps,
+            'tx_mbps': tx_mbps,
+        }
+
+    _prev_iface_bytes = {iface: {'rx': d['rx_bytes'], 'tx': d['tx_bytes']} for iface, d in raw.items()}
+    _prev_iface_time = now
+
+    return result
 
 
 def collect_wg_dump():
