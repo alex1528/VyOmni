@@ -734,7 +734,7 @@ def _hq_line_alert_lines(server_url):
         '  ],',
         '  "server_report": {"enabled": false, "url": "' + server_url + '/api/line-alert"},',
         '  "exports": [',
-        '    {"name": "主线路", "interface": "eth1", "enabled": true, "ping_target": "8.8.8.8", "bind_mode": "interface", "bind_src_ip": "", "fail_threshold": 3}',
+        '    {"name": "主线路", "interface": "eth1", "enabled": true, "ping_target": "223.5.5.5", "bind_mode": "auto", "bind_src_ip": "", "fail_threshold": 3}',
         '  ],',
         '  "tunnels": {"enabled": true, "handshake_timeout": 180, "fail_threshold": 2, "watch_list": [], "aliases": {}}',
         '}',

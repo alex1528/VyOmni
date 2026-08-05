@@ -45,17 +45,61 @@ echo "[2/3] 准备配置文件..."
 if [ ! -f "$INSTALL_DIR/line_alert.conf" ]; then
   cat > "$INSTALL_DIR/line_alert.conf" << 'LACONF_EOF'
 {
-  "enabled": false,
+  "enabled": true,
   "check_interval": 15,
   "default_fail_threshold": 3,
+
   "webhooks": [
-    {"type": "dingtalk", "url": "https://oapi.dingtalk.com/robot/send?access_token=[REDACTED_PARAM]
+    {
+      "type": "dingtalk",
+      "url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+    },
+    {
+      "type": "feishu",
+      "url": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_HOOK_ID"
+    },
+    {
+      "type": "telegram",
+      "url": "https://api.telegram.org/botYOUR_BOT_TOKEN/sendMessage",
+      "chat_id": "YOUR_CHAT_ID"
+    }
   ],
-  "server_report": {"enabled": false, "url": "SERVER_URL_PLACEHOLDER/api/line-alert"},
+
+  "server_report": {
+    "enabled": false,
+    "url": "http://SERVER_IP:9100/api/line-alert"
+  },
+
   "exports": [
-    {"name": "主线路", "interface": "eth1", "enabled": true, "ping_target": "8.8.8.8", "bind_mode": "interface", "bind_src_ip": "", "fail_threshold": 3}
+    {
+      "name": "电信CN2主线",
+      "interface": "eth1",
+      "enabled": true,
+      "ping_target": "223.5.5.5",
+      "bind_mode": "auto",
+      "bind_src_ip": "",
+      "fail_threshold": 3
+    },
+    {
+      "name": "联通备线",
+      "interface": "eth2",
+      "enabled": true,
+      "ping_target": "8.8.8.8",
+      "bind_mode": "auto",
+      "bind_src_ip": "",
+      "fail_threshold": 3
+    }
   ],
-  "tunnels": {"enabled": true, "handshake_timeout": 180, "fail_threshold": 2, "watch_list": [], "aliases": {}}
+
+  "tunnels": {
+    "enabled": true,
+    "handshake_timeout": 180,
+    "fail_threshold": 2,
+    "watch_list": [],
+    "aliases": {
+      "PEER_PUBKEY_BASE64=": "上海分支"
+    }
+  }
 }
 LACONF_EOF
   # 替换 server_report url 占位符

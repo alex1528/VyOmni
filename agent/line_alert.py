@@ -63,6 +63,34 @@ def save_state(state):
 
 
 # ==================== 检测：物理出口 ====================
+# 真实 ping 二进制（绕过 VyOS op-mode 包装器，后者不认 -I 短参数）
+PING_BIN = '/bin/ping' if os.path.exists('/bin/ping') else 'ping'
+FPING_BIN = '/usr/bin/fping' if os.path.exists('/usr/bin/fping') else None
+
+
+def get_iface_ipv4(iface):
+    """读取接口的首个 IPv4 地址（用于 bind_mode=auto 自动绑源IP）。
+    优先 /sys 无法拿 IP，用 ip -o -4 addr show 解析。返回 IP 字符串或 None。
+    """
+    try:
+        result = subprocess.run(
+            ['ip', '-o', '-4', 'addr', 'show', 'dev', iface],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode != 0:
+            return None
+        # 输出形如: "3: eth1    inet 112.82.212.174/24 brd ... scope global eth1"
+        for line in result.stdout.strip().split('\n'):
+            parts = line.split()
+            if 'inet' in parts:
+                idx = parts.index('inet')
+                if idx + 1 < len(parts):
+                    return parts[idx + 1].split('/')[0]
+    except Exception:
+        pass
+    return None
+
+
 def check_link_state(iface):
     """读取网卡 link 状态。返回 True=up, False=down/不存在"""
     path = f'/sys/class/net/{iface}/operstate'
@@ -76,17 +104,30 @@ def check_link_state(iface):
 
 def check_ping(target, bind_iface=None, bind_src_ip=None, count=2, timeout=2):
     """
-    ping 探测。支持两种源绑定方式：
-      - bind_iface: ping -I {接口名}（需策略路由/独立路由生效）
-      - bind_src_ip: ping -I {源IP}（绑定出口 IP 地址）
-    返回 True=通, False=不通
+    ping 探测。绑定优先级：源IP > 接口名。
+    ⚠️ VyOS 多出口/策略路由环境：-I 接口名 只绑出接口不触发 PBR，
+       回程选路错误导致假丢包；-I 源IP 命中 PBR 正确选路。故优先绑源IP。
+    使用真实 /bin/ping（绕过 VyOS op-mode 包装器，后者不认 -I）。
+    优先 fping（若可用），超时控制更精准。返回 True=通, False=不通。
     """
-    cmd = ['ping', '-c', str(count), '-W', str(timeout)]
-    # -I 参数：接口名 或 源IP 均可（iproute2 的 ping 都支持）
+    # 绑定源优先级：源IP 优先（VyOS PBR 环境唯一可靠方式）
     bind = bind_src_ip or bind_iface
-    if bind:
-        cmd += ['-I', bind]
-    cmd.append(target)
+
+    # 优先 fping：-S 绑源地址，-I 绑接口
+    if FPING_BIN:
+        cmd = [FPING_BIN, '-c', str(count), '-t', str(timeout * 1000), '-q']
+        if bind_src_ip:
+            cmd += ['-S', bind_src_ip]
+        elif bind_iface:
+            cmd += ['-I', bind_iface]
+        cmd.append(target)
+    else:
+        # 真实 ping：-I 接受 源IP 或 接口名
+        cmd = [PING_BIN, '-c', str(count), '-W', str(timeout), '-n']
+        if bind:
+            cmd += ['-I', bind]
+        cmd.append(target)
+
     try:
         result = subprocess.run(cmd, capture_output=True, timeout=count * timeout + 5)
         return result.returncode == 0
@@ -106,17 +147,26 @@ def check_export(exp):
     # 2. ping 连通性（可选）
     target = exp.get('ping_target', '')
     if target:
-        # bind_mode: interface(绑接口名) | src_ip(绑源IP) | none(不绑,仅默认路由)
-        bind_mode = exp.get('bind_mode', 'interface')
+        # bind_mode: auto(自动取接口IP绑源,默认,推荐) | src_ip(手填源IP) |
+        #            interface(绑接口名,VyOS多出口PBR环境会假故障,不推荐) | none(不绑)
+        # ⚠️ VyOS 实测：-I 接口名回程选路错误→假丢包；-I 源IP 命中PBR→正确
+        bind_mode = exp.get('bind_mode', 'auto')
         bind_iface = None
         bind_src_ip = None
-        if bind_mode == 'interface':
-            bind_iface = iface
+        if bind_mode == 'auto':
+            # 自动获取接口 IPv4 作为源地址（免手工填 bind_src_ip）
+            bind_src_ip = get_iface_ipv4(iface)
+            if not bind_src_ip:
+                # 取不到IP（接口无地址）→ 视为异常
+                return False, f'{iface} 无可用 IPv4 地址'
         elif bind_mode == 'src_ip':
             bind_src_ip = exp.get('bind_src_ip', '')
             if not bind_src_ip:
-                # 未配置源IP则回退到接口名绑定
-                bind_iface = iface
+                # 未手填源IP → 自动获取
+                bind_src_ip = get_iface_ipv4(iface)
+        elif bind_mode == 'interface':
+            bind_iface = iface
+        # bind_mode == 'none' → 两者都不绑，走默认路由
         ok = check_ping(target, bind_iface=bind_iface, bind_src_ip=bind_src_ip)
         if not ok:
             return False, f'{iface} ping {target} 不通'

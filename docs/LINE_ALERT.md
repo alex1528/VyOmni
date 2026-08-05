@@ -59,9 +59,10 @@ journalctl -u vyomni-line-alert -f
   - Telegram 额外需 `chat_id`，url 为 `https://api.telegram.org/bot<TOKEN>/sendMessage`
   - 飞书/Lark 用自定义机器人 webhook（文本消息 `msg_type=text`）
 - **exports[]** — 物理出口监控
-  - `bind_mode`: `interface`(绑接口名) | `src_ip`(绑源IP，填 `bind_src_ip`) | `none`(不绑)
+  - `bind_mode`（默认 `auto`）: `auto`(自动取接口IPv4绑源，**推荐**) | `src_ip`(手填 `bind_src_ip` 绑源) | `interface`(绑接口名，**VyOS PBR 环境会误报，不推荐**) | `none`(不绑，走默认路由)
   - `ping_target`: 探测目标（对端网关/公网IP）
   - `fail_threshold`: 连续失败几次才告警（防抖）
+  - 探测使用真实 `/bin/ping`（绕过 VyOS op-mode 包装器）；若装了 `fping` 优先用 fping（`-S` 绑源 / `-I` 绑接口）
 - **tunnels** — wg 隧道监控
   - `enabled`: **false 则完全不执行隧道告警**（仅监控物理出口）
   - `watch_list`: 空=监控全部 peer；填公钥=仅监控指定
@@ -74,9 +75,15 @@ journalctl -u vyomni-line-alert -f
 
 ## ⚠️ VyOS 环境注意事项
 
-1. **ping 出口绑定**：`bind_mode=interface` 依赖策略路由生效。若 HQ 多出口未配 PBR，`ping -I eth1` 可能仍走默认路由，探测不到特定线路故障 → 此时改用 `bind_mode=src_ip` 绑定该出口的源 IP 更可靠。
-2. **link 状态**：`operstate` 对物理链路 down 最可靠；上游故障（本端 up 但对端不通）需靠 ping 补充。
-3. **wg show 权限**：line_alert.py 需 root 运行（systemd 默认 root）才能执行 `wg show`。
+1. **ping 出口绑定（实测重要结论）**：VyOS 1.5 多出口/策略路由环境下：
+   - ❌ `-I 接口名`（如 `ping -I eth1`）：只绑出接口不触发 PBR，回程选路错误 → **假丢包误报**
+   - ✅ `-I 源IP`（如 `ping -I 112.82.212.174`）：命中 PBR 正确选路 → 真实结果
+   - 因此 `bind_mode` 默认 `auto`（自动取接口 IPv4 作源地址），**切勿用 `interface`**
+   - 另注：VyOS 的 `ping` 是 op-mode 包装器（`ping is aliased to _vyatta_op_run ping`），不认 `-I` 短参数；脚本已固定调用真实 `/bin/ping` 绕过。
+2. **fping 优先**：VyOS 自带 `fping`（实测 5.1），脚本优先用它，`-S` 绑源地址、`-t` 毫秒级超时更精准。
+3. **接口无 IPv4**：`bind_mode=auto` 下若接口取不到 IPv4（如未配地址），该出口直接判为异常告警。
+4. **link 状态**：`operstate` 对物理链路 down 最可靠；上游故障（本端 up 但对端不通）需靠 ping 补充。
+5. **wg show 权限**：line_alert.py 需 root 运行（systemd 默认 root）才能执行 `wg show`。
 
 ## 联调建议
 
