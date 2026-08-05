@@ -52,6 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
     loadHistory();
     poll();
     setInterval(poll, POLL_INTERVAL);
+    loadLineAlerts();
+    setInterval(loadLineAlerts, 30000);  // 线路告警低频拉取(30s)
 });
 
 // ==================== 主题切换 ====================
@@ -460,6 +462,58 @@ function renderAlerts() {
             <span class="msg">${escHtml(a.message)}</span>
         </div>
     `).join('');
+}
+
+// ==================== HQ 线路告警（后端回传，跨会话持久） ====================
+async function loadLineAlerts() {
+    const data = await fetchJSON('/api/line-alerts');
+    if (!data || !Array.isArray(data.alerts)) return;
+    renderLineAlerts(data.alerts);
+}
+
+function renderLineAlerts(events) {
+    const section = document.getElementById('line-alert-section');
+    const log = document.getElementById('line-alert-log');
+    const countBadge = document.getElementById('line-alert-count');
+    if (!section || !log) return;
+
+    // 无任何线路告警事件时隐藏整个 section
+    if (!events || events.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = '';
+
+    // 按接收时间倒序，最多展示 50 条
+    const sorted = [...events].sort((a, b) => (b.received_at || b.timestamp || 0) - (a.received_at || a.timestamp || 0));
+    const shown = sorted.slice(0, 50);
+
+    // 统计当前处于"中断"的线路数（同一 target_id 取最新事件判断）
+    const latestByTarget = {};
+    sorted.forEach(e => {
+        const tid = e.target_id || e.name || '';
+        if (!(tid in latestByTarget)) latestByTarget[tid] = e;
+    });
+    const downCount = Object.values(latestByTarget).filter(e => e.event === 'down').length;
+    countBadge.textContent = downCount;
+    countBadge.className = 'line-alert-badge' + (downCount > 0 ? ' has-down' : '');
+
+    log.innerHTML = shown.map(e => {
+        const isDown = e.event === 'down';
+        const level = isDown ? 'critical' : 'info';
+        const icon = isDown ? 'plug-circle-xmark' : 'plug-circle-check';
+        const kindLabel = e.kind === 'export' ? '出口' : e.kind === 'tunnel' ? '隧道' : '线路';
+        const ts = e.received_at || e.timestamp || 0;
+        const timeStr = ts ? new Date(ts * 1000).toLocaleString('zh-CN', { hour12: false }) : '-';
+        const host = e.hostname ? escHtml(e.hostname) + ' · ' : '';
+        return `
+        <div class="alert-item ${level}">
+            <span class="icon"><i class="fas fa-${icon}"></i></span>
+            <span class="time">${timeStr}</span>
+            <span class="line-kind-badge ${e.kind || ''}">${kindLabel}</span>
+            <span class="msg">${host}${escHtml(e.title || (e.name + (isDown ? ' 中断' : ' 恢复')))}${e.detail ? ' — ' + escHtml(e.detail) : ''}</span>
+        </div>`;
+    }).join('');
 }
 
 // ==================== 图表初始化 ====================

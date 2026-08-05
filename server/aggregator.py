@@ -696,6 +696,13 @@ def generate_deploy_script(token_str, token_info, server_url):
         'systemctl enable vyomni-agent',
         'systemctl start vyomni-agent',
         '',
+    ]
+
+    # HQ 角色：追加本地线路中断告警脚本（独立 systemd 服务，与 agent 解耦）
+    if role == 'hq':
+        lines += _hq_line_alert_lines(server_url)
+
+    lines += [
         'echo ""',
         'echo "=========================================="',
         'echo " 部署完成！"',
@@ -705,6 +712,62 @@ def generate_deploy_script(token_str, token_info, server_url):
     ]
 
     return chr(10).join(lines) + chr(10)
+
+
+def _hq_line_alert_lines(server_url):
+    """生成 HQ 本地线路告警脚本的部署片段（并入一键部署）"""
+    return [
+        'echo ""',
+        'echo "[HQ] 部署本地线路中断告警..."',
+        '# 下载告警脚本',
+        'curl -sL "' + server_url + '/api/deploy/files/line_alert.py" -o /opt/vyomni-agent/line_alert.py',
+        'chmod +x /opt/vyomni-agent/line_alert.py',
+        '# 首次部署写入配置模板（已存在则保留，不覆盖用户配置）',
+        'if [ ! -f /opt/vyomni-agent/line_alert.conf ]; then',
+        '  cat > /opt/vyomni-agent/line_alert.conf << "LACONF_EOF"',
+        '{',
+        '  "enabled": false,',
+        '  "check_interval": 15,',
+        '  "default_fail_threshold": 3,',
+        '  "webhooks": [',
+        '    {"type": "dingtalk", "url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"}',
+        '  ],',
+        '  "server_report": {"enabled": false, "url": "' + server_url + '/api/line-alert"},',
+        '  "exports": [',
+        '    {"name": "主线路", "interface": "eth1", "enabled": true, "ping_target": "8.8.8.8", "bind_mode": "interface", "bind_src_ip": "", "fail_threshold": 3}',
+        '  ],',
+        '  "tunnels": {"enabled": true, "handshake_timeout": 180, "fail_threshold": 2, "watch_list": [], "aliases": {}}',
+        '}',
+        'LACONF_EOF',
+        '  echo "  已生成配置模板 /opt/vyomni-agent/line_alert.conf (enabled=false, 请编辑后启用)"',
+        'else',
+        '  echo "  配置已存在，保留原配置"',
+        'fi',
+        '# 创建 systemd 服务',
+        'cat > /etc/systemd/system/vyomni-line-alert.service << "SVC_EOF"',
+        '[Unit]',
+        'Description=VyOmni HQ Line Alert',
+        'After=network-online.target',
+        'Wants=network-online.target',
+        '',
+        '[Service]',
+        'Type=simple',
+        'WorkingDirectory=/opt/vyomni-agent',
+        'ExecStart=/usr/bin/python3 /opt/vyomni-agent/line_alert.py',
+        'MemoryMax=20M',
+        'Restart=always',
+        'RestartSec=10',
+        'StandardOutput=journal',
+        'StandardError=journal',
+        '',
+        '[Install]',
+        'WantedBy=multi-user.target',
+        'SVC_EOF',
+        'systemctl daemon-reload',
+        'systemctl enable vyomni-line-alert',
+        'systemctl restart vyomni-line-alert',
+        'echo "  线路告警服务已启动 (journalctl -u vyomni-line-alert -f)"',
+    ]
 
 
 # === HTTP Handler ===
@@ -765,6 +828,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.handle_upload_upgrade()
         elif path == '/api/tokens/generate':
             self.handle_generate_token()
+        elif path == '/api/line-alert':
+            self.handle_line_alert_report()
         else:
             self.send_json(404, {'error': 'not found'})
 
@@ -787,6 +852,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.handle_get_history()
         elif path == '/api/config':
             self.handle_get_config()
+        elif path == '/api/line-alerts':
+            self.handle_get_line_alerts()
         elif re.match(r'^/api/deploy/tk_[0-9a-f]{12}$', path):
             token_str = path.split('/')[-1]
             self.handle_deploy_script(token_str)
@@ -818,6 +885,49 @@ class ApiHandler(BaseHTTPRequestHandler):
             del deploy_tokens[token_id]
             save_tokens()
         self.send_json(200, {'status': 'deleted', 'token': token_id})
+
+    # --- HQ 线路告警回传（看板展示）---
+    def handle_line_alert_report(self):
+        """POST /api/line-alert — 接收 HQ 本地告警事件，落盘供看板展示"""
+        body = self.read_body()
+        try:
+            event = json.loads(body)
+        except (json.JSONDecodeError, ValueError):
+            self.send_json(400, {'error': 'invalid JSON'})
+            return
+
+        event['received_at'] = int(time.time())
+        alerts_file = os.path.join(DATA_DIR, 'line-alerts.json')
+        with state_lock:
+            history = []
+            if os.path.exists(alerts_file):
+                try:
+                    with open(alerts_file) as f:
+                        history = json.load(f)
+                except (json.JSONDecodeError, IOError):
+                    history = []
+            history.append(event)
+            # 滚动上限 500 条
+            if len(history) > 500:
+                history = history[-500:]
+            try:
+                with open(alerts_file, 'w') as f:
+                    json.dump(history, f, ensure_ascii=False)
+            except IOError:
+                pass
+        self.send_json(200, {'status': 'ok'})
+
+    def handle_get_line_alerts(self):
+        """GET /api/line-alerts — 返回 HQ 线路告警历史（供看板）"""
+        alerts_file = os.path.join(DATA_DIR, 'line-alerts.json')
+        history = []
+        if os.path.exists(alerts_file):
+            try:
+                with open(alerts_file) as f:
+                    history = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                history = []
+        self.send_json(200, {'alerts': history})
 
     def handle_generate_token(self):
         """POST /api/tokens/generate — 生成一次性部署 Token"""
@@ -964,7 +1074,7 @@ class ApiHandler(BaseHTTPRequestHandler):
     def handle_deploy_file(self, filename):
         """GET /api/deploy/files/{filename} — 提供 Agent 文件下载"""
         # 白名单文件
-        allowed_files = {'agent_common.py', 'collector.py', 'branch_agent.py'}
+        allowed_files = {'agent_common.py', 'collector.py', 'branch_agent.py', 'line_alert.py'}
         if filename not in allowed_files:
             self.send_json(404, {'error': 'file not found: ' + filename})
             return

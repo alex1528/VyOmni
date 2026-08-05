@@ -327,6 +327,50 @@ body {
 .alert-item.info .icon { color: var(--accent-blue); }
 .no-alerts { text-align: center; color: var(--text-secondary); padding: 20px; }
 
+/* ===== HQ 线路告警 ===== */
+.line-alert-log {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+.line-alert-badge {
+    display: inline-block;
+    min-width: 20px;
+    padding: 1px 8px;
+    margin-left: 8px;
+    font-size: 0.7em;
+    font-weight: 700;
+    text-align: center;
+    border-radius: 10px;
+    background: var(--border-color);
+    color: var(--text-secondary);
+    vertical-align: middle;
+}
+.line-alert-badge.has-down {
+    background: var(--accent-red);
+    color: #fff;
+    animation: badge-pulse 1.6s ease-in-out infinite;
+}
+@keyframes badge-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+.line-kind-badge {
+    min-width: 34px;
+    padding: 1px 6px;
+    font-size: 0.72em;
+    text-align: center;
+    border-radius: 4px;
+    background: var(--border-color);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+.line-kind-badge.export { background: rgba(79,195,247,0.18); color: var(--accent-blue, #4fc3f7); }
+.line-kind-badge.tunnel { background: rgba(102,187,106,0.18); color: var(--accent-green, #66bb6a); }
+
 /* ===== 模态弹窗 ===== */
 .modal-overlay {
     display: none;
