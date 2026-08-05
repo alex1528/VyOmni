@@ -1,5 +1,5 @@
 {
-  "_comment": "VyOmni Server 端告警配置。type 支持 dingtalk/wecom/feishu/lark/telegram/generic",
+  "_comment": "VyOmni Server 端告警配置。type 支持 dingtalk/wecom/feishu/lark/telegram/generic。每个渠道可用 enabled 单独开关(缺省true)",
   "enabled": false,
   "fail_threshold": 2,
   "_monitors_comment": "监控开关。tunnel_handshake=false 则Server端不执行wg隧道握手告警(交由HQ本地line_alert负责)",
@@ -9,26 +9,31 @@
   "channels": [
     {
       "type": "dingtalk",
+      "enabled": true,
       "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN",
       "secret": ""
     },
     {
       "type": "wecom",
+      "enabled": false,
       "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
     },
     {
       "_note": "飞书/Lark 自定义机器人",
       "type": "feishu",
+      "enabled": false,
       "webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_HOOK_ID"
     },
     {
-      "_note": "Telegram: webhook_url 为 sendMessage 端点, 需填 chat_id",
+      "_note": "Telegram: sendMessage 端点, 需填 chat_id",
       "type": "telegram",
+      "enabled": false,
       "webhook_url": "https://api.telegram.org/botYOUR_BOT_TOKEN/sendMessage",
       "chat_id": "YOUR_CHAT_ID"
     },
     {
       "type": "generic",
+      "enabled": false,
       "webhook_url": "https://your-server.com/api/alert"
     }
   ]

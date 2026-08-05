@@ -163,7 +163,8 @@ def send_webhook(channel, title, detail, level):
 def dispatch(config, title, detail, level):
     """向所有配置的通道发送"""
     for channel in config.get('channels', []):
-        if channel.get('webhook_url'):
+        # 单渠道开关：enabled=false 则跳过（缺省 true 向后兼容）
+        if channel.get('enabled', True) and channel.get('webhook_url'):
             send_webhook(channel, title, detail, level)
 
 

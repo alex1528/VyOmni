@@ -730,7 +730,7 @@ def _hq_line_alert_lines(server_url):
         '  "check_interval": 15,',
         '  "default_fail_threshold": 3,',
         '  "webhooks": [',
-        '    {"type": "dingtalk", "url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"}',
+        '    {"type": "dingtalk", "enabled": true, "url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"}',
         '  ],',
         '  "server_report": {"enabled": false, "url": "' + server_url + '/api/line-alert"},',
         '  "exports": [',

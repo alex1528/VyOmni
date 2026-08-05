@@ -54,6 +54,7 @@ journalctl -u vyomni-line-alert -f
 ## 配置说明 (line_alert.conf)
 
 - **webhooks[]** — 通知渠道（可配多个，全部发送）
+  - `enabled`: 单渠道开关，`false` 则跳过该渠道（缺省 `true`）——可预置多个渠道，按需逐个启停
   - `type`: `dingtalk` / `wecom` / `feishu` / `lark` / `telegram` / `generic`
   - `url`: 机器人 webhook 地址
   - Telegram 额外需 `chat_id`，url 为 `https://api.telegram.org/bot<TOKEN>/sendMessage`
@@ -71,6 +72,7 @@ journalctl -u vyomni-line-alert -f
 
 ### Server 端 alert.json
 - `channels[]` — 同样支持 dingtalk/wecom/feishu/lark/telegram/generic
+  - 每个渠道同样支持 `enabled` 单渠道开关（`false` 跳过，缺省 `true`）
 - `monitors.tunnel_handshake` — **false 则 Server 端不执行隧道握手告警**（交由 HQ 本地负责，避免重复）
 
 ## ⚠️ VyOS 环境注意事项

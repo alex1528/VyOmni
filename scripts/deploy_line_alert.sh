@@ -52,14 +52,17 @@ if [ ! -f "$INSTALL_DIR/line_alert.conf" ]; then
   "webhooks": [
     {
       "type": "dingtalk",
+      "enabled": true,
       "url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
     },
     {
       "type": "feishu",
+      "enabled": false,
       "url": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_HOOK_ID"
     },
     {
       "type": "telegram",
+      "enabled": false,
       "url": "https://api.telegram.org/botYOUR_BOT_TOKEN/sendMessage",
       "chat_id": "YOUR_CHAT_ID"
     }

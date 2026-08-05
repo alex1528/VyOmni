@@ -303,7 +303,9 @@ def dispatch_alert(config, target_id, name, kind, is_down, reason):
         detail = f'类型: {kind} | 已恢复正常'
 
     for webhook in config.get('webhooks', []):
-        send_webhook(webhook, title, detail, level)
+        # 单渠道开关：enabled=false 则跳过（缺省 true 向后兼容）
+        if webhook.get('enabled', True):
+            send_webhook(webhook, title, detail, level)
 
     report_to_server(config, {
         'source': 'vyomni-hq-line-alert',
