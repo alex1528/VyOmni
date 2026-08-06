@@ -64,6 +64,7 @@ journalctl -u vyomni-line-alert -f
   - `ping_target`: 探测目标（对端网关/公网IP）
   - `fail_threshold`: 连续失败几次才告警（防抖）
   - 探测使用真实 `/bin/ping`（绕过 VyOS op-mode 包装器）；若装了 `fping` 优先用 fping（`-S` 绑源 / `-I` 绑接口）
+- **log_checks**（顶层，默认 `true`）— 每轮物理出口检测是否打印详细日志到 journal（link 状态/ping 命令/绑定方式+类型/工具/退出码/耗时/结果/失败输出）。排查假故障时很有用；确认稳定后可设 `false` 降噪。查看：`journalctl -u vyomni-line-alert -f | grep CHECK`
 - **tunnels** — wg 隧道监控
   - `enabled`: **false 则完全不执行隧道告警**（仅监控物理出口）
   - `watch_list`: 空=监控全部 peer；填公钥=仅监控指定

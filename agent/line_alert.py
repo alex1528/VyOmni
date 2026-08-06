@@ -67,6 +67,15 @@ def save_state(state):
 PING_BIN = '/bin/ping' if os.path.exists('/bin/ping') else 'ping'
 FPING_BIN = '/usr/bin/fping' if os.path.exists('/usr/bin/fping') else None
 
+# 检测日志开关（由 run_checks 从 config.log_checks 更新，默认开启）
+LOG_CHECKS = True
+
+
+def _clog(msg):
+    """检测日志输出（受 LOG_CHECKS 开关控制）"""
+    if LOG_CHECKS:
+        print(msg, file=sys.stderr)
+
 
 def get_iface_ipv4(iface):
     """读取接口的首个 IPv4 地址（用于 bind_mode=auto 自动绑源IP）。
@@ -109,6 +118,7 @@ def check_ping(target, bind_iface=None, bind_src_ip=None, count=2, timeout=2):
        回程选路错误导致假丢包；-I 源IP 命中 PBR 正确选路。故优先绑源IP。
     使用真实 /bin/ping（绕过 VyOS op-mode 包装器，后者不认 -I）。
     优先 fping（若可用），超时控制更精准。返回 True=通, False=不通。
+    返回 (ok: bool, detail: dict)，detail 含 cmd/耗时/退出码/输出摘要。
     """
     # 绑定源优先级：源IP 优先（VyOS PBR 环境唯一可靠方式）
     bind = bind_src_ip or bind_iface
@@ -128,21 +138,45 @@ def check_ping(target, bind_iface=None, bind_src_ip=None, count=2, timeout=2):
             cmd += ['-I', bind]
         cmd.append(target)
 
+    detail = {
+        'cmd': ' '.join(cmd),
+        'tool': 'fping' if FPING_BIN else 'ping',
+        'bind': bind_src_ip or bind_iface or '(default route)',
+        'bind_type': 'src_ip' if bind_src_ip else ('iface' if bind_iface else 'none'),
+    }
+    t0 = time.time()
     try:
         result = subprocess.run(cmd, capture_output=True, timeout=count * timeout + 5)
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, Exception):
-        return False
+        detail['elapsed_ms'] = int((time.time() - t0) * 1000)
+        detail['rc'] = result.returncode
+        err = (result.stderr or b'').decode('utf-8', 'ignore').strip()
+        out = (result.stdout or b'').decode('utf-8', 'ignore').strip()
+        detail['output'] = (err or out).replace('\n', ' ')[:200]
+        return result.returncode == 0, detail
+    except subprocess.TimeoutExpired:
+        detail['elapsed_ms'] = int((time.time() - t0) * 1000)
+        detail['rc'] = -1
+        detail['output'] = 'timeout'
+        return False, detail
+    except Exception as e:
+        detail['elapsed_ms'] = int((time.time() - t0) * 1000)
+        detail['rc'] = -2
+        detail['output'] = f'exception: {e}'
+        return False, detail
 
 
 def check_export(exp):
     """
     综合判定单条物理出口。返回 (ok: bool, reason: str)
     link 优先：link down 直接判失败，跳过 ping；link up 再看 ping（若配置了 target）。
+    同时打印详细检测日志（link/ping 命令、绑定方式、耗时、结果）。
     """
     iface = exp.get('interface', '')
+    name = exp.get('name', iface)
     # 1. link 状态
-    if not check_link_state(iface):
+    link_up = check_link_state(iface)
+    if not link_up:
+        _clog(f'[CHECK] 出口"{name}" iface={iface} link=DOWN → 异常')
         return False, f'{iface} link down'
     # 2. ping 连通性（可选）
     target = exp.get('ping_target', '')
@@ -158,6 +192,7 @@ def check_export(exp):
             bind_src_ip = get_iface_ipv4(iface)
             if not bind_src_ip:
                 # 取不到IP（接口无地址）→ 视为异常
+                _clog(f'[CHECK] 出口"{name}" iface={iface} link=UP bind_mode=auto → 无可用IPv4地址 → 异常')
                 return False, f'{iface} 无可用 IPv4 地址'
         elif bind_mode == 'src_ip':
             bind_src_ip = exp.get('bind_src_ip', '')
@@ -167,9 +202,16 @@ def check_export(exp):
         elif bind_mode == 'interface':
             bind_iface = iface
         # bind_mode == 'none' → 两者都不绑，走默认路由
-        ok = check_ping(target, bind_iface=bind_iface, bind_src_ip=bind_src_ip)
+        ok, d = check_ping(target, bind_iface=bind_iface, bind_src_ip=bind_src_ip)
+        status = 'OK' if ok else 'FAIL'
+        _clog(f'[CHECK] 出口"{name}" iface={iface} link=UP target={target} '
+              f'bind={d.get("bind")}({d.get("bind_type")}) tool={d.get("tool")} '
+              f'rc={d.get("rc")} {d.get("elapsed_ms")}ms → {status}'
+              + (f' | {d.get("output")}' if not ok and d.get("output") else ''))
         if not ok:
             return False, f'{iface} ping {target} 不通'
+    else:
+        _clog(f'[CHECK] 出口"{name}" iface={iface} link=UP (未配ping_target) → 正常')
     return True, 'ok'
 
 
@@ -347,6 +389,9 @@ def update_state_machine(state, target_id, name, kind, ok, reason, fail_threshol
 
 # ==================== 主循环 ====================
 def run_checks(config, state):
+    # 更新检测日志开关（config.log_checks，默认 true）
+    global LOG_CHECKS
+    LOG_CHECKS = config.get('log_checks', True)
     # --- 物理出口 ---
     for exp in config.get('exports', []):
         if not exp.get('enabled', True):
